@@ -13,6 +13,10 @@ enum Scene {
 /// Alien formation geometry: the horde occupies `Horde::ROWS` rows starting
 /// under the score HUD; the ship patrols the last playfield row.
 const FIELD_TOP: i32 = PAD * 5;
+/// Playfield width in grid cells; shadows the model's `COLS` on purpose so
+/// the pixel view can keep its i32 screen arithmetic (`gui::COLS`).
+const COLS: i32 = crate::models::invaders::COLS as i32;
+
 /// Cell size in pixels (the field is COLS x ROWS of these).
 fn cell(field: (i32, i32)) -> (f32, f32) {
     (

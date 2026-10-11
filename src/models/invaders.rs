@@ -3,6 +3,10 @@ use crate::*;
 /// Fixed timestep for the physics simulation (seconds per tick).
 pub const TICK: f32 = 1.0 / 60.0;
 
+/// Playfield width in grid cells. Must match the view's `COLS` constant;
+/// the classic horde is 11 aliens wide, plus a one-cell margin on each side.
+pub const COLS: usize = 13;
+
 /// Marching speed of the alien horde, in cells per second, per level tier.
 const MARCH_SPEEDS: [f32; 4] = [1.2, 1.8, 2.6, 3.6];
 /// Alien fire rate (shots per second) and player bullet cooldown, per tier.
@@ -20,7 +24,7 @@ pub struct Ship {
 impl Ship {
     pub fn new() -> Self {
         Self {
-            col: COLS as usize / 2,
+            col: COLS / 2,
             cooldown: 0.0,
         }
     }
@@ -62,7 +66,7 @@ impl Horde {
 
     pub fn new() -> Self {
         Self {
-            rows: vec![vec![true; COLS as usize - 2]; Self::ROWS],
+            rows: vec![vec![true; COLS - 2]; Self::ROWS],
             dir: 1,
             offset: 0.0,
             drop: false,
@@ -72,7 +76,9 @@ impl Horde {
     /// step was taken (a good moment for the view to play an animation beat).
     pub fn march(&mut self, step: f32) -> bool {
         self.offset += step;
-        if self.dir > 0 && self.right_edge() >= COLS - 1 || self.dir < 0 && self.left_edge() <= 1 {
+        if self.dir > 0 && self.right_edge() >= COLS as i32 - 1
+            || self.dir < 0 && self.left_edge() <= 1
+        {
             self.dir = -self.dir;
             self.drop = true;
         }
@@ -83,7 +89,7 @@ impl Horde {
                 let mut next = vec![false; row.len()];
                 for (i, &alive) in row.iter().enumerate() {
                     if alive {
-                        next[(i as i32 + self.dir) as usize] = true;
+                        next[i.saturating_add_signed(self.dir as isize)] = true;
                     }
                 }
                 *row = next;
@@ -93,7 +99,7 @@ impl Horde {
                 // Drop the whole formation by one row: top row becomes empty,
                 // each other row takes over the row above it.
                 self.rows.pop();
-                self.rows.insert(0, vec![false; COLS as usize - 2]);
+                self.rows.insert(0, vec![false; COLS - 2]);
             }
             return true;
         }
@@ -116,7 +122,7 @@ impl Horde {
             }
         }
         if edge == init {
-            if min { COLS } else { -1 }
+            if min { COLS as i32 } else { -1 }
         } else {
             edge
         }
@@ -138,7 +144,7 @@ impl Horde {
     }
     /// A random living column, used to pick which alien fires this tick.
     pub fn shooter(&self, rng: &mut impl RngExt) -> Option<usize> {
-        let cols: Vec<usize> = (0..COLS as usize)
+        let cols: Vec<usize> = (0..COLS)
             .filter(|&c| self.rows.iter().any(|row| row[c]))
             .collect();
         if cols.is_empty() {

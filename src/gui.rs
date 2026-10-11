@@ -2,8 +2,7 @@ pub use {
     comfy_table::{Table, modifiers, presets},
     fltk::{
         app,
-        app::event_coords,
-        app::event_key,
+        app::{event_button, event_coords, event_key},
         draw,
         enums::{Align, Color, Cursor, Event, Font, Key},
         image::SvgImage,
