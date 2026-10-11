@@ -1,5 +1,4 @@
 pub use {
-    comfy_table::{Table, modifiers, presets},
     fltk::{
         app,
         app::{event_button, event_coords, event_key},
@@ -145,8 +144,18 @@ where
         crate::CURRENT.set(Some(Box::new({
             let state = state.clone();
             let alive = alive.clone();
+            let busy = busy.clone();
             move |path: &str| {
                 alive.set(false);
+                // Mark the state as busy while we borrow it: FLTK may deliver a
+                // queued redraw *inside* this call (e.g. from `redraw()` issued
+                // by the game just before returning to the menu). Without the
+                // guard the draw closure would `borrow_mut()` the same RefCell
+                // -> "RefCell already mutably borrowed" panic.
+                if busy.get() {
+                    return; // an outer callback already holds the borrow
+                }
+                let _guard = BorrowGuard(busy.clone());
                 state.borrow().exit(path);
             }
         })));
@@ -254,40 +263,61 @@ impl Painter for Window {
         draw::draw_rect_fill(0, 0, self.w(), self.h(), color);
     }
     fn draw_welcome(&self, title: &str, menu: &[&[&str]]) {
+        // Big bold title, centered (no external ASCII-art/table crates).
+        draw::set_font(Font::CourierBold, 48);
+        draw::set_draw_color(sol::BASE03);
+        let (tw, th) = draw::measure(title, false);
+        draw::draw_text2(
+            title,
+            self.w() / 2 - tw / 2,
+            self.h() / 5 - th / 2,
+            tw,
+            th,
+            Align::Center,
+        );
+        // Menu rows inside a framed panel, key column highlighted in orange.
+        let row_h = 34;
+        let pad = 24;
         draw::set_font(Font::CourierBold, 20);
-        draw::set_draw_color(Color::Green);
-        draw::draw_text2(
-            &figleter::FIGfont::standard()
-                .unwrap()
-                .convert(title)
-                .unwrap()
-                .to_string(),
-            0,
-            self.h() / 4,
-            self.w(),
-            HEIGHT,
-            Align::Center,
-        );
-        draw::set_draw_color(Color::Red);
-        draw::draw_text2(
-            &{
-                let mut table = Table::new();
-                table.load_preset(match cfg!(target_os = "windows") {
-                    true => presets::ASCII_FULL,
-                    false => presets::UTF8_FULL,
-                });
-                table.apply_modifier(modifiers::UTF8_ROUND_CORNERS);
-                for row in menu {
-                    table.add_row(*row);
-                }
-                table
+        let mut max_w = 0;
+        for row in menu {
+            let line = row.join("   ");
+            let (w, _) = draw::measure(&line, false);
+            if w > max_w {
+                max_w = w;
             }
-            .to_string(),
-            0,
-            self.h() / 3 * 2,
-            self.w(),
-            HEIGHT,
-            Align::Center,
-        );
+        }
+        let panel_w = max_w + 2 * pad;
+        let panel_h = menu.len() as i32 * row_h + 2 * pad;
+        let x0 = self.w() / 2 - panel_w / 2;
+        let y0 = self.h() / 2 - panel_h / 6;
+        draw::set_draw_color(sol::BASE2);
+        draw::draw_rounded_rectf(x0, y0, panel_w, panel_h, 10);
+        draw::set_draw_color(sol::BASE01);
+        draw::draw_rounded_rect(x0, y0, panel_w, panel_h, 10);
+        for (i, row) in menu.iter().enumerate() {
+            let y = y0 + pad + i as i32 * row_h;
+            match row {
+                [key, hint] => {
+                    draw::set_draw_color(sol::ORANGE);
+                    draw::draw_text2(key, x0 + pad, y, max_w, row_h, Align::Left);
+                    draw::set_draw_color(sol::BASE00);
+                    let (kw, _) = draw::measure(key, false);
+                    draw::draw_text2(
+                        *hint,
+                        x0 + pad + kw + 24,
+                        y,
+                        max_w - kw - 24,
+                        row_h,
+                        Align::Left,
+                    );
+                }
+                [single] => {
+                    draw::set_draw_color(sol::BASE03);
+                    draw::draw_text2(single, x0 + pad, y, max_w, row_h, Align::Left);
+                }
+                _ => {}
+            }
+        }
     }
 }
