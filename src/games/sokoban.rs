@@ -1,6 +1,10 @@
 use crate::gui::*;
 use crate::models::sokoban::*;
 
+/// Extra Solarized palette entries (FLTK has no named constants for these).
+const BASE01: Color = Color::from_rgb(101, 123, 131);
+const ORANGE: Color = Color::from_rgb(203, 75, 22);
+
 #[derive(Default, PartialEq)]
 enum Scene {
     #[default]
@@ -54,7 +58,7 @@ impl Model {
         if self.board.push(dr, dc) {
             self.history.push((dr, dc));
             if self.board.solved() {
-                self.score.solved(LEVELS.len());
+                self.score.advance(LEVELS.len());
                 self.scene = Scene::Solved;
             }
         }
@@ -119,6 +123,7 @@ impl Console for Model {
                 const RIGHT: Key = Key::from_char('d');
                 const UP: Key = Key::from_char('w');
                 const DOWN: Key = Key::from_char('s');
+                const U: Key = Key::from_char('u');
                 match event_key() {
                     Key::Escape => match self.scene {
                         Scene::Playing => self.scene = Scene::Paused,
@@ -132,7 +137,7 @@ impl Console for Model {
                         Scene::Solved => self.restart(),
                         Scene::Playing => {}
                     },
-                    Key::BackSpace | Key::from_char('u') => self.undo(),
+                    Key::BackSpace | U => self.undo(),
                     Key::Left | LEFT => self.step(0, -1),
                     Key::Right | RIGHT => self.step(0, 1),
                     Key::Up | UP => self.step(-1, 0),
@@ -167,7 +172,7 @@ impl Console for Model {
                     for c in 0..cols {
                         let (x, y, w, h) = self.rect(r, c);
                         if self.board.wall(r, c) {
-                            draw::draw_rect_fill(x, y, w, h, Color::Base01);
+                            draw::draw_rect_fill(x, y, w, h, BASE01);
                             continue;
                         }
                         // Floor tile under everything else.
@@ -176,16 +181,16 @@ impl Console for Model {
                             // Goal marker: a small diamond outline.
                             let d = w / 4;
                             draw::set_draw_color(Color::Yellow);
-                            draw::draw_line(x + w / 2, y + d, x + w - d, y + h / 2, Color::Yellow);
-                            draw::draw_line(x + w - d, y + h / 2, x + w / 2, y + h - d, Color::Yellow);
-                            draw::draw_line(x + w / 2, y + h - d, x + d, y + h / 2, Color::Yellow);
-                            draw::draw_line(x + d, y + h / 2, x + w / 2, y + d, Color::Yellow);
+                            draw::set_draw_color(Color::Yellow); draw::draw_line(x + w / 2, y + d, x + w - d, y + h / 2);
+                            draw::set_draw_color(Color::Yellow); draw::draw_line(x + w - d, y + h / 2, x + w / 2, y + h - d);
+                            draw::set_draw_color(Color::Yellow); draw::draw_line(x + w / 2, y + h - d, x + d, y + h / 2);
+                            draw::set_draw_color(Color::Yellow); draw::draw_line(x + d, y + h / 2, x + w / 2, y + d);
                         }
                         if self.board.crate_at(r, c) {
                             let color = if self.board.goal(r, c) {
                                 Color::Green
                             } else {
-                                Color::Orange
+                                ORANGE
                             };
                             draw::draw_rect_fill(x + w / 8, y + h / 8, w * 3 / 4, h * 3 / 4, color);
                         }

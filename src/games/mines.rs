@@ -17,6 +17,11 @@ const GRID_ROWS: usize = 8;
 const MINES: usize = 18;
 const CELL: i32 = 40;
 
+/// Extra Solarized palette entries (FLTK has no named constants for these).
+const BASE2: Color = Color::from_rgb(238, 232, 213); // base2 / background
+const BASE3: Color = Color::from_rgb(253, 246, 227); // base3 / background2
+const ORANGE: Color = Color::from_rgb(203, 75, 22);
+
 /// Solarized number colors for the classic 1..8 mine counts.
 const NUMBERS: [Color; 8] = [
     Color::from_rgb(38, 139, 210), // blue
@@ -221,14 +226,16 @@ impl Console for Model {
                         }
                     } else {
                         // Closed: raised base2 tile, flags drawn on top.
-                        draw::set_draw_color(Color::Base2);
-                        draw::draw_rect_fill(x, y, w, h, Color::Base2);
-                        draw::set_draw_color(Color::Base3);
-                        draw::draw_line(x, y + h, x + w, y + h, Color::Base3);
-                        draw::draw_line(x + w, y, x + w, y + h, Color::Base3);
+                        draw::set_draw_color(BASE2);
+                        draw::draw_rect_fill(x, y, w, h, BASE2);
+                        draw::set_draw_color(BASE3);
+                        draw::set_draw_color(BASE3);
+                        draw::draw_line(x, y + h, x + w, y + h);
+                        draw::set_draw_color(BASE3);
+                        draw::draw_line(x + w, y, x + w, y + h);
                         if cell.flag {
-                            draw::set_draw_color(Color::Orange);
-                            draw::draw_rect_fill(x + w / 3, y + h / 4, w / 3, h / 2, Color::Orange);
+                            draw::set_draw_color(ORANGE);
+                            draw::draw_rect_fill(x + w / 3, y + h / 4, w / 3, h / 2, ORANGE);
                         }
                     }
                 }

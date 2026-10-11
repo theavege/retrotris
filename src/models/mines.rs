@@ -39,12 +39,6 @@ impl Board {
             won: false,
         }
     }
-    pub fn dims(&self) -> (usize, usize) {
-        (self.rows, self.cols)
-    }
-    pub fn total_mines(&self) -> usize {
-        self.mines
-    }
     pub fn cell(&self, r: usize, c: usize) -> &Cell {
         &self.cells[r * self.cols + c]
     }

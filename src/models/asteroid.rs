@@ -1,4 +1,6 @@
 use crate::*;
+use rand::Rng;
+
 
 /// Fixed timestep for the physics simulation (seconds per tick).
 pub const TICK: f32 = 1.0 / 60.0;
@@ -187,18 +189,9 @@ impl Shots {
     pub fn bodies(&self) -> &[Body] {
         &self.bodies
     }
-    /// Remove the first bullet overlapping `rock`; true when it was hit.
-    pub fn take_hit(&mut self, rock: &Body) -> bool {
-        if let Some(i) = self
-            .bodies
-            .iter()
-            .position(|b| Body { rad: 0.0, ..*b }.touches(rock))
-        {
-            self.bodies.remove(i);
-            self.lives.remove(i);
-            return true;
-        }
-        false
+    pub fn remove(&mut self, index: usize) {
+        self.bodies.remove(index);
+        self.lives.remove(index);
     }
     pub fn clear(&mut self) {
         self.bodies.clear();
@@ -257,6 +250,29 @@ impl Belt {
     pub fn hits(&self, ship: &Body) -> bool {
         self.rocks.iter().any(|r| r.body.touches(ship))
     }
+    /// Shoot every bullet at the rocks; each shattered rock spawns splinters.
+    /// Returns the scales of all destroyed rocks (for scoring).
+    pub fn shot(&mut self, shots: &mut Shots, rng: &mut impl RngExt) -> Vec<usize> {
+        let mut hit = Vec::new();
+        loop {
+            let target = shots
+                .bodies()
+                .iter()
+                .enumerate()
+                .find_map(|(i, b)| self.rocks.iter().find(|r| b.touches(&r.body)).map(|r| (i, r.body)));
+            match target {
+                Some((shot, rock)) => match self.blast(&rock, rng) {
+                    Some(scale) => {
+                        shots.remove(shot);
+                        hit.push(scale);
+                    }
+                    None => break,
+                },
+                None => break,
+            }
+        }
+        hit
+    }
 }
 
 /// Game score: points per shattered rock (smaller = better), lives and wave
@@ -301,5 +317,40 @@ impl Score {
     /// Rocks to seed for the given wave (wave 0 starts with four).
     pub fn seeds(&self) -> usize {
         4 + self.wave as usize
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bullet_shatters_big_rock_into_splinters() {
+        let mut rng = rand::rng();
+        let mut belt = Belt::default();
+        // Place a big rock manually so the test does not depend on randomness.
+        belt.rocks.push(Rock {
+            body: Body { pos: (500.0, 500.0), vel: (0.0, 0.0), rad: Rock::RADII[0] },
+            scale: 1,
+            spin: 0.0,
+            heading: 0.0,
+        });
+        let mut shots = Shots::default();
+        shots.fire((500.0, 500.0), 0.0);
+        let hit = belt.shot(&mut shots, &mut rng);
+        assert_eq!(hit, vec![1]);
+        assert_eq!(belt.len(), 2); // two splinters in place of the big rock
+        assert!(shots.bodies().is_empty());
+    }
+
+    #[test]
+    fn positions_wrap_toroidally() {
+        let mut body = Body {
+            pos: (FIELD_W - 1.0, 1.0),
+            vel: (100.0, 0.0),
+            rad: 1.0,
+        };
+        body.fly(1.0);
+        assert!(body.pos.0 < 1.0);
     }
 }

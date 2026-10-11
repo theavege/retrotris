@@ -1,8 +1,6 @@
-use rand::RngExt;
 
 /// Fixed timestep for the simulation (kept for API symmetry with other games;
 /// Sokoban is turn-based — every push happens on a discrete input event).
-pub const TICK: f32 = 1.0 / 60.0;
 
 /// One classic Microban-style level as text rows:
 /// `#` wall, `@` player, `$` crate, `.` goal, `*` crate on goal, `+` player
@@ -174,11 +172,8 @@ pub struct Score {
 }
 
 impl Score {
-    pub fn reset(&mut self) {
-        self.level = 0;
-    }
     /// Advance to the next level after a solve; returns the new index.
-    pub fn solved(&mut self, level_count: usize) -> usize {
+    pub fn advance(&mut self, level_count: usize) -> usize {
         self.best += 1;
         self.level = (self.level + 1) % level_count;
         self.level

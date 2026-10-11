@@ -39,6 +39,8 @@ impl View {
 }
 
 const SHOT_COOLDOWN: f32 = 0.22;
+const BASE01: Color = Color::from_rgb(147, 153, 153);
+const BASE1: Color = Color::from_rgb(131, 148, 150);
 
 #[derive(Default)]
 pub struct Model {
@@ -56,24 +58,13 @@ pub struct Model {
     shot_held: bool,
 }
 
-impl Default for ShipHolder {
-    fn default() -> Self {
-        Self(Ship::new())
-    }
-}
-
-/// Wrapper so `Model` can derive `Default` (Ship has its own sensible default).
-#[derive(Default)]
-struct ShipHolder(Ship);
-
 impl Model {
     fn restart(&mut self) {
         self.ship = Ship::new();
         self.belt = Belt::default();
-        self.belt.seed(self.score.seeds(), &mut rand::rng());
         self.shots.clear();
         self.score.reset();
-        self.belt.seed(4, &mut rand::rng());
+        self.belt.seed(self.score.seeds(), &mut rand::rng());
         self.timer = 0.0;
         self.fire_timer = 0.0;
         self.left = false;
@@ -105,17 +96,7 @@ impl Model {
             "SCORE {}   BEST {}   WAVE {}   LIVES {}",
             self.score.points, self.score.best, self.score.wave, self.score.lives
         );
-        let (w, h) = draw::measure(&line, false);
-        draw::set_font(Font::CourierBold, 24);
-        draw::set_draw_color(Color::Foreground);
-        draw::draw_text2(
-            &line,
-            window.w() / 2 - w / 2,
-            PAD,
-            w,
-            h + i32::from(h == 0),
-            Align::Center,
-        );
+        window.draw_text(&line, window.w() / 2, PAD, Color::Foreground, Align::Center, 24);
     }
     /// Wireframe triangle for the ship, rotated by its heading.
     fn draw_ship(&self, view: &View) {
@@ -133,17 +114,17 @@ impl Model {
             self.ship.body.pos.0 - a.cos() * r * 0.8 + a.sin() * r * 0.7,
             self.ship.body.pos.1 - a.sin() * r * 0.8 - a.cos() * r * 0.7,
         );
-        let color = if self.ship.vulnerable() {
+        draw::set_draw_color(if self.ship.vulnerable() {
             Color::Foreground
         } else {
-            Color::Inactive // blink while the respawn shield is up
-        };
+            Color::Inactive // dimmed while the respawn shield is up
+        });
         let (x1, y1) = view.px(nose);
         let (x2, y2) = view.px(back);
         let (x3, y3) = view.px(front);
-        draw::draw_line(x1, y1, x2, y2, color);
-        draw::draw_line(x2, y2, x3, y3, color);
-        draw::draw_line(x3, y3, x1, y1, color);
+        draw::draw_line(x1, y1, x2, y2);
+        draw::draw_line(x2, y2, x3, y3);
+        draw::draw_line(x3, y3, x1, y1);
     }
 }
 
@@ -157,6 +138,13 @@ impl Console for Model {
         let _ = std::fs::write(path, self.score.best.to_string());
     }
     fn handle(&mut self, window: &mut Window, event: Event) -> bool {
+        const LEFT: Key = Key::Left;
+        const RIGHT: Key = Key::Right;
+        const UP: Key = Key::Up;
+        const A: Key = Key::from_char('a');
+        const D: Key = Key::from_char('d');
+        const W: Key = Key::from_char('w');
+        const SPACE: Key = Key::from_char(' ');
         match event {
             Event::Focus => true,
             Event::Resize => {
@@ -167,10 +155,6 @@ impl Console for Model {
                 true
             }
             Event::KeyDown => {
-                const LEFT: Key = Key::from_char('a');
-                const RIGHT: Key = Key::from_char('d');
-                const UP: Key = Key::from_char('w');
-                const SPACE: Key = Key::from_char(' ');
                 match event_key() {
                     Key::Escape => match self.scene {
                         Scene::Playing => self.scene = Scene::Paused,
@@ -183,9 +167,9 @@ impl Console for Model {
                         Scene::Paused => self.scene = Scene::Playing,
                         Scene::Playing => {}
                     },
-                    Key::Left | LEFT => self.left = true,
-                    Key::Right | RIGHT => self.right = true,
-                    Key::Up | UP => self.thrust = true,
+                    LEFT | A => self.left = true,
+                    RIGHT | D => self.right = true,
+                    UP | W => self.thrust = true,
                     SPACE => {
                         self.shot_held = true;
                         self.shoot();
@@ -196,14 +180,11 @@ impl Console for Model {
                 true
             }
             Event::KeyUp => {
-                const LEFT: Key = Key::from_char('a');
-                const RIGHT: Key = Key::from_char('d');
-                const UP: Key = Key::from_char('w');
                 match event_key() {
-                    Key::Left | LEFT => self.left = false,
-                    Key::Right | RIGHT => self.right = false,
-                    Key::Up | UP => self.thrust = false,
-                    Key::from_char(' ') => self.shot_held = false,
+                    LEFT | A => self.left = false,
+                    RIGHT | D => self.right = false,
+                    UP | W => self.thrust = false,
+                    SPACE => self.shot_held = false,
                     _ => return false,
                 };
                 true
@@ -222,30 +203,22 @@ impl Console for Model {
         self.timer += dt;
         while self.timer >= TICK {
             self.timer -= TICK;
-            let dt = TICK;
-            self.fire_timer -= dt;
+            self.fire_timer -= TICK;
             if self.left {
-                self.ship.turn(-1.0, dt);
+                self.ship.turn(-1.0, TICK);
             }
             if self.right {
-                self.ship.turn(1.0, dt);
+                self.ship.turn(1.0, TICK);
             }
             if self.thrust {
-                self.ship.thrust(dt);
+                self.ship.thrust(TICK);
             }
-            self.ship.fly(dt);
-            self.belt.fly(dt);
-            self.shots.fly(dt);
-            // Bullets vs. rocks: first overlapping bullet shatters the rock.
+            self.ship.fly(TICK);
+            self.belt.fly(TICK);
+            self.shots.fly(TICK);
             let mut rng = rand::rng();
-            let hit_scales: Vec<usize> = self
-                .belt
-                .rocks()
-                .iter()
-                .filter(|rock| self.shots.take_hit(&rock.body))
-                .map(|rock| rock.scale)
-                .collect();
-            for scale in hit_scales {
+            // Bullets vs. rocks: overlapping bullets shatter the rocks.
+            for scale in self.belt.shot(&mut self.shots, &mut rng) {
                 self.score.rock(scale);
             }
             // Ship vs. rocks (only when the respawn shield has faded).
@@ -254,7 +227,6 @@ impl Console for Model {
                 if self.scene != Scene::Playing {
                     return;
                 }
-                continue;
             }
             // Wave cleared: seed a slightly denser belt.
             if self.belt.is_empty() {
@@ -266,12 +238,12 @@ impl Console for Model {
         }
     }
     fn draw(&self, window: &mut Window) {
-        draw::draw_rect_fill(0, 0, window.width(), window.height(), Color::Background);
+        window.draw_background(Color::Background);
         match self.scene {
             Scene::Welcome => window.draw_welcome(
                 "Asteroids",
                 &[
-                    &[["BEST SCORE", &self.score.best.to_string()][0]],
+                    &["BEST SCORE", &self.score.best.to_string()],
                     &["PRESS ENTER", "for play"],
                     &["PRESS ESC", "for exit"],
                 ],
@@ -281,22 +253,16 @@ impl Console for Model {
                 let view = View::new(self.field);
                 // Playfield border so the wrap-around edges are visible.
                 let (x, y) = view.px((0.0, 0.0));
-                draw::draw_rect(
-                    x,
-                    y,
-                    view.r(FIELD_W),
-                    view.r(FIELD_H),
-                    0,
-                    Color::Base1,
-                );
+                window.draw_rect(x, y, view.r(FIELD_W), view.r(FIELD_H), 0, BASE1);
                 // Rocks: wireframe circles with a rotating notch for spin.
+                draw::set_draw_color(BASE01);
                 for rock in self.belt.rocks() {
                     let (cx, cy) = view.px(rock.body.pos);
                     let r = view.r(rock.body.rad);
-                    draw::draw_circle(cx - r, cy - r, 2 * r, Color::Base01);
+                    draw::draw_circle(f64::from(cx - r), f64::from(cy - r), f64::from(2 * r));
                     let hx = cx + (rock.heading.cos() * r as f32) as i32;
                     let hy = cy + (rock.heading.sin() * r as f32) as i32;
-                    draw::draw_line(cx, cy, hx, hy, Color::Base01);
+                    draw::draw_line(cx, cy, hx, hy);
                 }
                 // Bullets: tiny filled squares.
                 for b in self.shots.bodies() {
@@ -312,7 +278,7 @@ impl Console for Model {
                         self.ship.body.pos.1 - a.sin() * self.ship.body.rad * 1.2,
                     );
                     let (tx, ty) = view.px(tail);
-                    draw::draw_circle_fill(tx - 4, ty - 4, 8, Color::Orange);
+                    draw::draw_circle_fill(tx - 4, ty - 4, 8, Color::from_rgb(203, 75, 22));
                 }
                 if self.scene == Scene::Paused {
                     window.draw_overlay("PAUSED", "PRESS ENTER to resume", Color::Background2);
