@@ -1,3 +1,4 @@
+pub mod bird;
 pub mod pong;
 pub mod runner;
 pub mod snake;
