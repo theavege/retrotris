@@ -130,7 +130,7 @@ impl Console for Model {
                         Scene::Playing => self.scene = Scene::Paused,
                         Scene::Paused => self.scene = Scene::Playing,
                         Scene::GameOver => self.scene = Scene::Welcome,
-                        Scene::Welcome => crate::Model::connect(window),
+                        Scene::Welcome => crate::Game::to_menu(window),
                     },
                     Key::Enter => match self.scene {
                         Scene::Welcome | Scene::GameOver => self.restart(),

@@ -124,6 +124,18 @@ impl Ball {
     pub fn draw(&self) -> (i32, i32, i32) {
         (self.pos.0 as i32, self.pos.1 as i32, Self::SIZE)
     }
+    /// Horizontal velocity component (pixels per tick).
+    pub fn vx(&self) -> f32 {
+        self.vel.0
+    }
+    /// Vertical velocity component (pixels per tick).
+    pub fn vy(&self) -> f32 {
+        self.vel.1
+    }
+    /// True while the ball travels toward the right (CPU) goal.
+    pub fn moving_right(&self) -> bool {
+        self.vel.0 > 0.0
+    }
 }
 
 /// Game score: points won by each player plus the best streak, persisted

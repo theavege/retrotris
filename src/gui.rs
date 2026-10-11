@@ -87,6 +87,8 @@ where
             window.xclass().unwrap(),
         );
         let state = std::rc::Rc::new(std::cell::RefCell::new(Self::default()));
+        // Remember the live state so the app can save it when leaving the game.
+        crate::CURRENT.set(Some(state.clone()));
         state.borrow_mut().load(&path);
         let mut time = Instant::now();
         window.draw({

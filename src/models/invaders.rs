@@ -7,6 +7,9 @@ pub const TICK: f32 = 1.0 / 60.0;
 /// the classic horde is 11 aliens wide, plus a one-cell margin on each side.
 pub const COLS: usize = 13;
 
+/// Number of columns the alien horde occupies (centered inside the playfield).
+pub const HORDE_COLS: usize = COLS - 2;
+
 /// Marching speed of the alien horde, in cells per second, per level tier.
 const MARCH_SPEEDS: [f32; 4] = [1.2, 1.8, 2.6, 3.6];
 /// Alien fire rate (shots per second) and player bullet cooldown, per tier.
@@ -66,7 +69,16 @@ impl Horde {
 
     pub fn new() -> Self {
         Self {
-            rows: vec![vec![true; COLS - 2]; Self::ROWS],
+            // Rows use absolute playfield columns; the horde starts centered
+            // with a one-cell margin on each side of the field.
+            rows: vec![
+                {
+                    let mut row = vec![false; COLS];
+                    row[1..1 + HORDE_COLS].fill(true);
+                    row
+                };
+                Self::ROWS
+            ],
             dir: 1,
             offset: 0.0,
             drop: false,
@@ -84,22 +96,26 @@ impl Horde {
         }
         if self.offset >= 1.0 {
             self.offset -= 1.0;
-            for row in &mut self.rows {
-                // Shift every live cell one column in the march direction.
-                let mut next = vec![false; row.len()];
-                for (i, &alive) in row.iter().enumerate() {
-                    if alive {
-                        next[i.saturating_add_signed(self.dir as isize)] = true;
+            if !self.drop {
+                for row in &mut self.rows {
+                    // Shift every live cell one column in the march
+                    // direction, clamping so nothing can leave the field.
+                    let mut next = vec![false; COLS];
+                    for (i, &alive) in row.iter().enumerate() {
+                        if alive {
+                            let to = (i as i32 + self.dir).clamp(0, COLS as i32 - 1) as usize;
+                            next[to] = true;
+                        }
                     }
+                    *row = next;
                 }
-                *row = next;
             }
             if self.drop {
                 self.drop = false;
                 // Drop the whole formation by one row: top row becomes empty,
                 // each other row takes over the row above it.
                 self.rows.pop();
-                self.rows.insert(0, vec![false; COLS - 2]);
+                self.rows.insert(0, vec![false; COLS]);
             }
             return true;
         }

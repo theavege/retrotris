@@ -42,19 +42,43 @@ impl Model {
     fn speed(&self) -> f32 {
         SPEED_BASE + self.score.level() as f32 * SPEED_STEP
     }
-    /// Simple CPU: tracks the ball vertically with a limited paddle speed so
-    /// it stays beatable at higher levels.
+    /// Simple CPU: tracks the row where the ball is *predicted* to cross the
+    /// goal line (mirrored off top/bottom walls) instead of its current row,
+    /// which stops the paddle from jittering when it overshoots the target.
     fn cpu_ai(&mut self) {
-        let (_, ball_y, _) = self.ball.draw();
-        let max_step = HEIGHT / 2 + self.score.level() as i32 * 2;
-        let (_, cy, _, ch) = self.cpu.draw();
-        let center = cy + ch / 2;
-        let target = if ball_y < center {
-            cy - max_step
+        let field_h = self.field.1.max(1);
+        let (ball_x, ball_y, size) = self.ball.draw();
+        let center = size as f32 / 2.0;
+        // Simulate the ball forward until it reaches the CPU's column.
+        let mut px = ball_x;
+        let mut py = ball_y + center;
+        let mut vy = self.ball.vy();
+        if self.ball.moving_right() {
+            let limit = field_h as f32 - size as f32;
+            while px < self.cpu.x() as f32 {
+                px += self.ball.vx();
+                py += vy;
+                if py <= center {
+                    py = center + (center - py);
+                    vy = vy.abs();
+                } else if py >= limit + center {
+                    py = 2.0 * (limit + center) - py;
+                    vy = -vy.abs();
+                }
+            }
         } else {
-            cy + max_step
-        };
-        self.cpu.set_y(target, self.field.1);
+            // Ball moving away: drift back toward the field center.
+            py = field_h as f32 / 2.0;
+        }
+        let (_, cy, _, ch) = self.cpu.draw();
+        let cur = (cy + ch / 2) as f32;
+        // Proportional chase with a dead zone: fast when far, never overshoots.
+        let err = py - cur;
+        let max_step = HEIGHT / 2 + self.score.level() as i32 * 2;
+        let step = (err * 0.4).clamp(-max_step as f32, max_step as f32) as i32;
+        if step != 0 {
+            self.cpu.slide(step, self.field.1);
+        }
     }
     fn draw_score(&self, window: &Window) {
         let line = format!(
@@ -104,7 +128,7 @@ impl Console for Model {
                         State::Playing | State::Serving => self.state = State::Paused,
                         State::Paused => self.state = State::Playing,
                         State::GameOver => self.state = State::Menu,
-                        State::Menu => crate::Model::connect(window),
+                        State::Menu => crate::Game::to_menu(window),
                     },
                     Key::Enter => match self.state {
                         State::Menu | State::GameOver => self.restart(),

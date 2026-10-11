@@ -19,6 +19,15 @@ pub enum Game {
     Asteroids,
 }
 
+/// Saves the live game state's record and reconnects the window handlers to
+/// the menu model. Used by every game's "back to menu" action.
+pub fn to_menu(window: &mut Window) {
+    if let Some(saver) = CURRENT.take() {
+        saver(&current_path(window));
+    }
+    Model::connect(window);
+}
+
 impl Game {
     fn switch(&self) -> Self {
         match self {
@@ -66,6 +75,26 @@ impl Game {
 
 #[derive(Default)]
 pub struct Model(Game);
+
+thread_local! {
+    /// Saves the record of the game currently connected to the window; set by
+    /// `Console::connect` and consumed when returning to the menu.
+    static CURRENT: std::cell::Cell<Option<Box<dyn Fn(&str)>>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Path of the save file for the game shown in `window` (see `Console::connect`).
+fn current_path(window: &Window) -> String {
+    format!(
+        "{}/.{}",
+        std::env::var(match cfg!(target_os = "windows") {
+            true => "HOMEPATH",
+            false => "HOME",
+        })
+        .unwrap(),
+        window.xclass().unwrap(),
+    )
+}
 
 impl Console for Model {
     fn load(&mut self, _path: &str) {}

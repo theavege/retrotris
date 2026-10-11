@@ -42,7 +42,7 @@ impl Console for Model {
                         Scene::Playing => self.scene = Scene::Paused,
                         Scene::Paused => self.scene = Scene::Playing,
                         Scene::GameOver => self.scene = Scene::Welcome,
-                        Scene::Welcome => crate::Model::connect(window),
+                        Scene::Welcome => crate::Game::to_menu(window),
                     },
                     Key::Enter | SPACE => match self.scene {
                         Scene::Playing => self.scene = Scene::Paused,

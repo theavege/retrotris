@@ -160,7 +160,7 @@ impl Console for Model {
                         State::Playing => self.state = State::Paused,
                         State::Paused => self.state = State::Playing,
                         State::GameOver => self.state = State::Menu,
-                        State::Menu => crate::Model::connect(window),
+                        State::Menu => crate::Game::to_menu(window),
                     },
                     Some(Key::Enter) | Some(Key::Up) | Some(SPACE) | Some(W) => self.flap(),
                     Some(P) => match self.state {
