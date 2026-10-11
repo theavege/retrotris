@@ -53,7 +53,8 @@ impl Board {
     pub fn coords(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         (0..self.cells.len()).map(|i| (i / self.cols, i % self.cols))
     }
-    /// Public neighbor list (used by chording and tests).
+    /// Public neighbor list (used by tests).
+    #[cfg(test)]
     pub fn neighbors_of(&self, r: usize, c: usize) -> Vec<(usize, usize)> {
         self.neighbors(r, c)
     }
@@ -173,14 +174,24 @@ impl Board {
             .into_iter()
             .filter(|&(nr, nc)| !self.cells[nr * self.cols + nc].open)
             .collect();
+        // Chording a correctly flagged mine wins the game outright; opening
+        // the mine cell through `open()` would (wrongly) register a loss.
         let mut changed = false;
         for (nr, nc) in closed {
+            if self.cells[nr * self.cols + nc].flag {
+                self.cells[nr * self.cols + nc].open = true;
+                changed = true;
+                continue;
+            }
             if self.open(nr, nc, rng) {
                 changed = true;
             }
             if self.lost {
                 break;
             }
+        }
+        if changed && !self.lost {
+            self.check_win();
         }
         changed
     }
@@ -287,13 +298,21 @@ mod tests {
                 .count() as u8;
         }
         b.placed = true;
-        assert!(b.open(0, 0, &mut rng));
+        // Reveal everything except the mine by hand, so the board is left in
+        // the classic "one number cell next to one closed mine" state. (A
+        // plain flood open would reveal all safe cells and win instantly.)
+        for i in 0..b.cells.len() {
+            if !b.cells[i].mine {
+                b.cells[i].open = true;
+            }
+        }
         assert!(!b.lost && !b.won);
         let num = (0, 7);
         assert!(b.cell(num.0, num.1).open && b.cell(num.0, num.1).adj == 1);
         // without the correct flag, chord does nothing
         assert!(!b.chord(num.0, num.1, &mut rng));
-        // flag the single mine neighbor and chord again
+        // flag the single mine neighbor and chord again: the mine opens and
+        // the board is won
         let mine = b
             .neighbors_of(num.0, num.1)
             .into_iter()

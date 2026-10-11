@@ -150,7 +150,7 @@ mod tests {
         snake.direction(0, -1); // buffer a turn up
         let head = snake.update((10, 10)).unwrap();
         assert_eq!(head, (5, 4)); // moved up, not right
-                                  // the buffered turn was consumed: keep going up
+        // the buffered turn was consumed: keep going up
         let head2 = snake.update((10, 10)).unwrap();
         assert_eq!(head2, (5, 3));
         // reversing into the neck is ignored while moving up

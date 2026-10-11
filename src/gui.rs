@@ -33,6 +33,7 @@ pub mod sol {
     pub const BASE02: Color = Color::from_hex(0x073642);
     pub const BASE01: Color = Color::from_hex(0x586e75);
     pub const BASE00: Color = Color::from_hex(0x657b83);
+    #[allow(dead_code)] // full Solarized palette kept for future use
     pub const BASE0: Color = Color::from_hex(0x839496);
     pub const BASE1: Color = Color::from_hex(0x93a1a1);
     pub const BASE2: Color = Color::from_hex(0xeee8d5);

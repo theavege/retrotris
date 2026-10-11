@@ -229,12 +229,7 @@ impl Console for Model {
                     paddle.3 as i32,
                 );
                 let ball = self.ball.draw();
-                draw::draw_circle_fill(
-                    ball.0 as i32,
-                    ball.1 as i32,
-                    ball.2 as i32,
-                    sol::BASE03,
-                );
+                draw::draw_circle_fill(ball.0 as i32, ball.1 as i32, ball.2 as i32, sol::BASE03);
                 match self.state {
                     State::Paused => {
                         window.draw_overlay("PAUSED", "PRESS ENTER to resume", sol::VIOLET)

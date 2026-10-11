@@ -228,10 +228,7 @@ impl Console for Model {
                 let cpu = self.cpu.draw();
                 let ball = self.ball.draw();
                 // Player paddle: orange with dark outline; CPU: violet; ball: base03.
-                for (rect, fill) in [
-                    (player, sol::ORANGE),
-                    (cpu, sol::VIOLET),
-                ] {
+                for (rect, fill) in [(player, sol::ORANGE), (cpu, sol::VIOLET)] {
                     draw::draw_rect_fill(rect.0, rect.1, rect.2, rect.3, fill);
                     draw::set_draw_color(sol::BASE03);
                     draw::draw_rect(rect.0, rect.1, rect.2, rect.3);

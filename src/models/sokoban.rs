@@ -10,15 +10,7 @@ pub type LevelSpec = &'static [&'static str];
 /// A hand-picked set of small beginner levels (public-domain style layouts).
 pub const LEVELS: &[LevelSpec] = &[
     &[
-        "########",
-        "#      #",
-        "#.$$$ .#",
-        "#  ....#",
-        "#   .. #",
-        "@#####.#",
-        "######.#",
-        "#######.",
-        "     ####",
+        "########", "#.@  .##", "##  $ ##", "# $ #$ #", "#  .#  #", "##   ###", "#######",
     ],
     &[
         "##########",

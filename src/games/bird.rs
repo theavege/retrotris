@@ -83,7 +83,7 @@ impl Model {
         // body (bright yellow circle with a dark outline -> pops on base2 bg)
         draw::draw_circle_fill(x as i32, y as i32, (2.0 * r) as i32, sol::YELLOW);
         draw::set_draw_color(sol::BASE02);
-        draw::draw_circle(x as i32, y as i32, (2.0 * r) as i32);
+        draw::draw_circle(x as f64, y as f64, 2.0 * r as f64);
         // wing (rotates with the body)
         let (wx, wy) = px(-r * 0.35, 0.0);
         draw::draw_circle_fill(wx, wy, (0.9 * r) as i32, sol::ORANGE);
@@ -91,7 +91,7 @@ impl Model {
         let (ex, ey) = px(r * 0.4, -r * 0.35);
         draw::draw_circle_fill(ex, ey, (0.36 * r) as i32, Color::Background);
         draw::set_draw_color(sol::BASE03);
-        draw::draw_circle(ex, ey, (0.36 * r) as i32);
+        draw::draw_circle(ex as f64, ey as f64, 0.36 * r as f64);
         // pupil
         draw::draw_circle_fill(ex + 1, ey, (0.14 * r).max(1.0) as i32, sol::BASE03);
         // beak
