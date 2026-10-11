@@ -17,6 +17,7 @@ pub enum Game {
     Mines,
     Sokoban,
     Asteroids,
+    Mario,
 }
 
 /// Saves the live game state's record and reconnects the window handlers to
@@ -40,7 +41,8 @@ impl Game {
             Self::Invaders => Self::Mines,
             Self::Mines => Self::Sokoban,
             Self::Sokoban => Self::Asteroids,
-            Self::Asteroids => Self::Tetris,
+            Self::Asteroids => Self::Mario,
+            Self::Mario => Self::Tetris,
         }
     }
     fn to_str(&self) -> &str {
@@ -55,6 +57,7 @@ impl Game {
             Self::Mines => "Minesweeper",
             Self::Sokoban => "Sokoban",
             Self::Asteroids => "Asteroids",
+            Self::Mario => "Mario",
         }
     }
     fn to_play(&self, window: &mut Window) {
@@ -69,6 +72,7 @@ impl Game {
             Self::Mines => games::mines::Model::connect(window),
             Self::Sokoban => games::sokoban::Model::connect(window),
             Self::Asteroids => games::asteroid::Model::connect(window),
+            Self::Mario => games::mario::Model::connect(window),
         }
     }
 }

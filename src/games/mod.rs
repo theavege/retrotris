@@ -2,6 +2,7 @@ pub mod arkanoid;
 pub mod asteroid;
 pub mod bird;
 pub mod invaders;
+pub mod mario;
 pub mod mines;
 pub mod pong;
 pub mod runner;

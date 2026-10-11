@@ -12,9 +12,6 @@ pub const WALK_SPEED: f32 = 160.0;
 pub const ACCEL: f32 = 900.0;
 /// Ground friction (px/s^2) applied when no direction key is held.
 pub const FRICTION: f32 = 1200.0;
-/// How far below the tile surface the player's feet may hang and still be
-/// considered "on the ground" (snap tolerance).
-pub const GROUND_SNAP: f32 = 8.0;
 /// Player width in pixels.
 pub const PLAYER_W: f32 = 18.0;
 /// Player height in pixels.
@@ -189,16 +186,13 @@ impl Player {
         // Horizontal move + resolve.
         self.x += self.vx * dt;
         for s in solids {
-            let mut r = self.hitbox();
-            if r.overlaps(s) {
+            if self.hitbox().overlaps(s) {
                 if self.vx > 0.0 {
                     self.x = s.x - PLAYER_W + 2.0;
                 } else if self.vx < 0.0 {
                     self.x = s.x + s.w - 2.0;
                 }
                 self.vx = 0.0;
-                r = self.hitbox();
-                let _ = r;
             }
         }
         // Vertical move + resolve.
@@ -409,11 +403,12 @@ impl Mario {
         let row = self.world.spawn.1.max(self.world.rows.saturating_sub(3));
         self.player.reset(self.world.spawn.0, row);
     }
+    /// Jump request from the view (buffered until the player lands).
+    pub fn jump(&mut self) {
+        self.player.jump();
+    }
     /// Advances the whole simulation by `dt` seconds.
     pub fn update(&mut self, dt: f32) {
-        if !matches!(self.scene, Scene::Playing) {
-            return;
-        }
         self.time_ms += (dt * 1000.0) as u32;
         let solids = self.world.solids.clone();
         self.prev_bottom = self.player.y + PLAYER_H;
@@ -524,26 +519,23 @@ mod tests {
     fn stomp_kills_goomba_and_bounces() {
         let mut mario = Mario::default();
         mario.start();
-        // Freeze the player in mid-air above a stationary goomba so only the
-        // vertical (stomp) collision path runs.
+        // Freeze every goomba so only the vertical (stomp) collision path runs.
         for g in &mut mario.world.goombas {
             g.dir = 0.0;
         }
-        let target_y = mario.player.y + PLAYER_H + 4.0;
+        // Land the player on solid ground first, then place a stationary
+        // goomba right under his feet and make him fall onto it.
+        let solids = mario.world.solids.clone();
+        for _ in 0..120 {
+            mario.player.update(1.0 / 60.0, &solids);
+        }
+        assert!(mario.player.grounded, "player should settle on ground");
         let mut g = mario.world.goombas.remove(0);
         g.x = mario.player.x + PLAYER_W / 2.0 - (TILE - 6.0) / 2.0;
-        g.y = target_y;
+        g.y = mario.player.y + PLAYER_H - 2.0; // slight overlap for contact
         mario.world.goombas.push(g);
-        mario.player.vy = 100.0;
-        // Hold the player at a fixed height: update() re-applies gravity and
-        // ground snapping, which would otherwise change vy before the check.
-        let solids = std::mem::take(&mut mario.world.solids);
+        mario.player.vy = 100.0; // falling
         mario.update(1.0 / 60.0);
-        mario.world.solids = solids;
-        println!(
-            "player y={} vy={} g0 dead={} x={} y={}",
-            mario.player.y, mario.player.vy, mario.world.goombas[0].dead, mario.world.goombas[0].x, mario.world.goombas[0].y
-        );
         assert!(mario.world.goombas[0].dead);
         assert!(mario.player.vy < 0.0, "player should bounce upward");
         assert_eq!(mario.score.current, STOMP_SCORE);

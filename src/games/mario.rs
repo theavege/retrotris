@@ -36,6 +36,7 @@ impl Console for Model {
                 const SPACE: Key = Key::from_char(' ');
                 const A: Key = Key::from_char('a');
                 const D: Key = Key::from_char('d');
+                const W: Key = Key::from_char('w');
                 match event_key() {
                     Key::Escape => match self.game.scene {
                         Scene::Playing => self.game.scene = Scene::Paused,
@@ -43,7 +44,7 @@ impl Console for Model {
                         Scene::GameOver => self.game.scene = Scene::Welcome,
                         Scene::Welcome => crate::to_menu(window),
                     },
-                    Key::Enter | SPACE => match self.game.scene {
+                    Key::Enter | SPACE | Key::Up | W => match self.game.scene {
                         Scene::Playing => self.game.jump(),
                         Scene::Paused => self.game.scene = Scene::Playing,
                         Scene::GameOver => {
@@ -82,6 +83,8 @@ impl Console for Model {
             let dir = self.right as i8 - self.left as i8;
             self.game.player.walk(dir as f32);
             // Clamp dt so a stalled tab cannot tunnel through floors.
+            // All world simulation (coins, goombas, pits, flag) happens
+            // inside Mario::update.
             self.game.update(dt.min(0.05));
         }
     }
@@ -150,9 +153,6 @@ impl Console for Model {
 }
 
 impl Model {
-    fn jump(&mut self) {
-        self.game.player.jump();
-    }
     fn draw_hud(&self, window: &Window) {
         window.draw_text(
             &format!(
@@ -193,7 +193,7 @@ impl Model {
             let cx = ox * 0.5 + (k as f32) * 300.0 + 60.0;
             let cy = oy + 30.0 + (k % 3) as f32 * 24.0;
             if cx > -80.0 && cx < sky as f32 + 80.0 {
-                draw::draw_ellipsef(cx + PAD as f32, cy, 70.0, 22.0);
+                draw::draw_arc(cx as i32, cy as i32, 70, 22, 0.0, 360.0);
             }
         }
         draw::set_draw_color(sol::BASE2);
@@ -213,7 +213,7 @@ impl Model {
             let y = oy + s.y;
             let row = (s.y / TILE) as usize;
             let color = match row >= ground_row {
-                true => sol::ORANGE, // earth
+                true => sol::ORANGE,  // earth
                 false => sol::BASE02, // floating blocks
             };
             draw::draw_rect_fill(x as i32, y as i32, s.w as i32, s.h as i32, color);
@@ -228,16 +228,20 @@ impl Model {
                 },
             );
         }
-        // Bricks with their type marker.
+        // Bricks: a yellow rivet in the middle of each block tile.
         for (c, r) in &self.game.world.bricks {
             let x = ox + *c as f32 * TILE;
             if x + TILE < PAD as f32 || x > window.w() as f32 - PAD as f32 {
                 continue;
             }
             let y = oy + *r as f32 * TILE;
-            let ch = '?' ; // both B and ? are stored together; render a knob
-            let _ = ch;
-            draw::draw_rect_fill((x + TILE / 4.0) as i32, (y + TILE / 4.0) as i32, 12, 12, sol::YELLOW);
+            draw::draw_rect_fill(
+                (x + TILE / 4.0) as i32,
+                (y + TILE / 4.0) as i32,
+                (TILE / 2.0) as i32,
+                (TILE / 2.0) as i32,
+                sol::YELLOW,
+            );
         }
         // Coins: spinning via time-based width wobble.
         let spin = ((self.game.time_ms % 800) as f32 / 800.0 * std::f32::consts::TAU).cos();
@@ -247,22 +251,38 @@ impl Model {
                 continue;
             }
             let w = (8.0 * spin.abs()).max(2.0);
-            draw::draw_ellipsef(x, oy + cy, w * 2.0, 16.0);
             draw::set_draw_color(sol::YELLOW);
-            draw::draw_arc(x as i32, (oy + cy) as i32, w as i32 * 2, 16, 0, 360);
+            draw::draw_arc(
+                (x - w) as i32,
+                (oy + cy - 8.0) as i32,
+                (w * 2.0) as i32,
+                16,
+                0.0,
+                360.0,
+            );
         }
         // Flagpole with banner.
         let fx = ox + self.game.world.flag_x;
         if fx > PAD as f32 && fx < window.w() as f32 - PAD as f32 {
             let fy = oy + self.game.world.flag_y;
-            draw::draw_rect_fill(fx as i32, (fy - FLAG_HEIGHT) as i32, 4, FLAG_HEIGHT as i32, sol::BASE01);
-            draw::draw_circle(fx + 2.0, fy - FLAG_HEIGHT, 6.0, sol::YELLOW);
+            draw::draw_rect_fill(
+                fx as i32,
+                (fy - FLAG_HEIGHT) as i32,
+                4,
+                FLAG_HEIGHT as i32,
+                sol::BASE01,
+            );
+            draw::set_draw_color(sol::YELLOW);
+            draw::draw_circle(fx as f64 + 2.0, (fy - FLAG_HEIGHT) as f64, 6.0);
             draw::set_draw_color(sol::GREEN);
-            draw::draw_polygon(&[
-                (fx as i32 + 4, (fy - FLAG_HEIGHT) as i32 + 4),
-                (fx as i32 + 30, (fy - FLAG_HEIGHT) as i32 + 12),
-                (fx as i32 + 4, (fy - FLAG_HEIGHT) as i32 + 24),
-            ]);
+            draw::draw_polygon(
+                fx as i32 + 4,
+                (fy - FLAG_HEIGHT) as i32 + 4,
+                fx as i32 + 30,
+                (fy - FLAG_HEIGHT) as i32 + 12,
+                fx as i32 + 4,
+                (fy - FLAG_HEIGHT) as i32 + 24,
+            );
         }
         // Goombas.
         for g in &self.game.world.goombas {
@@ -276,7 +296,13 @@ impl Model {
                 // Squashed pancake.
                 draw::draw_rect_fill(x as i32, (y + h - 6.0) as i32, h as i32 + 6, 6, sol::BASE00);
             } else {
-                draw::draw_rect_fill(x as i32, y as i32, (TILE - 6.0) as i32, (h * 0.7) as i32, sol::BASE00);
+                draw::draw_rect_fill(
+                    x as i32,
+                    y as i32,
+                    (TILE - 6.0) as i32,
+                    (h * 0.7) as i32,
+                    sol::BASE00,
+                );
                 draw::draw_rect_fill(
                     (x + 3.0) as i32,
                     (y + h * 0.7) as i32,
@@ -309,7 +335,13 @@ impl Model {
             1 => 3.0,
             _ => 0.0,
         };
-        draw::draw_rect_fill((px + 1.0) as i32, (py + 19.0) as i32, 6, 3 + leg_off as i32, sol::BLUE);
+        draw::draw_rect_fill(
+            (px + 1.0) as i32,
+            (py + 19.0) as i32,
+            6,
+            3 + leg_off as i32,
+            sol::BLUE,
+        );
         draw::draw_rect_fill(
             (px + PLAYER_W - 7.0) as i32,
             (py + 19.0) as i32,
@@ -322,6 +354,7 @@ impl Model {
             true => px + PLAYER_W - 5.0,
             false => px + 1.0,
         };
-        draw::draw_point(nx as i32, (py + 11.0) as i32, sol::BASE02);
+        draw::set_draw_color(sol::BASE02);
+        draw::draw_point(nx as i32, (py + 11.0) as i32);
     }
 }
