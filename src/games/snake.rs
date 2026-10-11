@@ -177,13 +177,13 @@ impl Console for Model {
                         }
                     }
                 }
-                // APPLE
-                draw::draw_circle_fill(
-                    self.apple.0 * cell + cell / 2,
-                    self.apple.1 * cell + cell / 2,
-                    cell / 2,
-                    Color::Red,
-                );
+                // APPLE (diameter == full cell; +1 radius so odd cell sizes don't leave a gap)
+                let field_w = COLS * cell;
+                let ax = self.apple.0 * cell + cell / 2 + (window.width() - field_w) / 2;
+                let ay = self.apple.1 * cell + cell / 2;
+                draw::draw_circle_fill(ax, ay, cell / 2 + 1, Color::Red);
+                // leaf
+                draw::draw_circle_fill(ax + cell / 5, ay - cell / 2, cell / 8, Color::Green);
                 // SNAKE BODY
                 for &seg in &self.snake.body[1..] {
                     draw::draw_rect_fill(seg.0 * cell, seg.1 * cell, cell, cell, Color::Cyan);

@@ -1,6 +1,5 @@
-
-/// Fixed timestep for the simulation (kept for API symmetry with other games;
-/// Sokoban is turn-based — every push happens on a discrete input event).
+// NOTE: there is no fixed timestep here on purpose — Sokoban is turn-based,
+// every push happens on a discrete input event.
 
 /// One classic Microban-style level as text rows:
 /// `#` wall, `@` player, `$` crate, `.` goal, `*` crate on goal, `+` player
@@ -11,12 +10,7 @@ pub type LevelSpec = &'static [&'static str];
 /// A hand-picked set of small beginner levels (public-domain style layouts).
 pub const LEVELS: &[LevelSpec] = &[
     &[
-        "########",
-        "#      #",
-        "#.$$$ @#",
-        "#  ....#",
-        "#      #",
-        "########",
+        "########", "#      #", "#.$$$ @#", "#  ....#", "#      #", "########",
     ],
     &[
         "##########",
@@ -115,7 +109,10 @@ impl Sokoban {
         self.at(r, c).is_some_and(|i| self.boxes[i])
     }
     pub fn player(&self) -> (usize, usize) {
-        (self.player / self.cols.max(1), self.player % self.cols.max(1))
+        (
+            self.player / self.cols.max(1),
+            self.player % self.cols.max(1),
+        )
     }
     pub fn stats(&self) -> (u32, u32) {
         (self.moves, self.pushes)

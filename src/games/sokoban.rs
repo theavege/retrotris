@@ -181,10 +181,14 @@ impl Console for Model {
                             // Goal marker: a small diamond outline.
                             let d = w / 4;
                             draw::set_draw_color(Color::Yellow);
-                            draw::set_draw_color(Color::Yellow); draw::draw_line(x + w / 2, y + d, x + w - d, y + h / 2);
-                            draw::set_draw_color(Color::Yellow); draw::draw_line(x + w - d, y + h / 2, x + w / 2, y + h - d);
-                            draw::set_draw_color(Color::Yellow); draw::draw_line(x + w / 2, y + h - d, x + d, y + h / 2);
-                            draw::set_draw_color(Color::Yellow); draw::draw_line(x + d, y + h / 2, x + w / 2, y + d);
+                            draw::set_draw_color(Color::Yellow);
+                            draw::draw_line(x + w / 2, y + d, x + w - d, y + h / 2);
+                            draw::set_draw_color(Color::Yellow);
+                            draw::draw_line(x + w - d, y + h / 2, x + w / 2, y + h - d);
+                            draw::set_draw_color(Color::Yellow);
+                            draw::draw_line(x + w / 2, y + h - d, x + d, y + h / 2);
+                            draw::set_draw_color(Color::Yellow);
+                            draw::draw_line(x + d, y + h / 2, x + w / 2, y + d);
                         }
                         if self.board.crate_at(r, c) {
                             let color = if self.board.goal(r, c) {
@@ -196,12 +200,7 @@ impl Console for Model {
                         }
                         if (r, c) == (pr, pc) {
                             draw::set_draw_color(Color::Cyan);
-                            draw::draw_circle_fill(
-                                x + w / 4,
-                                y + h / 4,
-                                w / 2,
-                                Color::Cyan,
-                            );
+                            draw::draw_circle_fill(x + w / 4, y + h / 4, w / 2, Color::Cyan);
                         }
                     }
                 }

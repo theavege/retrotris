@@ -72,7 +72,11 @@ impl Board {
     /// Scatter mines avoiding the safe zone around the first click.
     fn place(&mut self, sr: usize, sc: usize, rng: &mut impl RngExt) {
         let safe: Vec<usize> = std::iter::once(sr * self.cols + sc)
-            .chain(self.neighbors(sr, sc).into_iter().map(|(r, c)| r * self.cols + c))
+            .chain(
+                self.neighbors(sr, sc)
+                    .into_iter()
+                    .map(|(r, c)| r * self.cols + c),
+            )
             .collect();
         // Collect every cell outside the safe zone, shuffle it Fisher-Yates
         // style and take the first `mines` entries as bomb positions.

@@ -24,12 +24,12 @@ const ORANGE: Color = Color::from_rgb(203, 75, 22);
 
 /// Solarized number colors for the classic 1..8 mine counts.
 const NUMBERS: [Color; 8] = [
-    Color::from_rgb(38, 139, 210), // blue
-    Color::from_rgb(42, 161, 152), // cyan
-    Color::from_rgb(133, 153, 0),  // green
-    Color::from_rgb(203, 75, 22),  // orange
-    Color::from_rgb(211, 54, 130), // magenta
-    Color::from_rgb(181, 137, 0),  // yellow
+    Color::from_rgb(38, 139, 210),  // blue
+    Color::from_rgb(42, 161, 152),  // cyan
+    Color::from_rgb(133, 153, 0),   // green
+    Color::from_rgb(203, 75, 22),   // orange
+    Color::from_rgb(211, 54, 130),  // magenta
+    Color::from_rgb(181, 137, 0),   // yellow
     Color::from_rgb(147, 153, 153), // base1
     Color::from_rgb(101, 123, 131), // base01
 ];
@@ -152,7 +152,7 @@ impl Console for Model {
             }
             Event::Push => {
                 let (x, y) = event_coords();
-                self.click(event_button(), x as i32, y as i32);
+                self.click(event_button(), x, y);
                 window.redraw();
                 true
             }
@@ -244,7 +244,11 @@ impl Console for Model {
                 }
             }
             Scene::GameOver => {
-                let title = if self.board.won { "You Win!" } else { "Game Over" };
+                let title = if self.board.won {
+                    "You Win!"
+                } else {
+                    "Game Over"
+                };
                 let secs = self.score.time.round() as i32;
                 window.draw_welcome(
                     title,

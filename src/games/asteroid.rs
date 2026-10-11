@@ -96,7 +96,14 @@ impl Model {
             "SCORE {}   BEST {}   WAVE {}   LIVES {}",
             self.score.points, self.score.best, self.score.wave, self.score.lives
         );
-        window.draw_text(&line, window.w() / 2, PAD, Color::Foreground, Align::Center, 24);
+        window.draw_text(
+            &line,
+            window.w() / 2,
+            PAD,
+            Color::Foreground,
+            Align::Center,
+            24,
+        );
     }
     /// Wireframe triangle for the ship, rotated by its heading.
     fn draw_ship(&self, view: &View) {

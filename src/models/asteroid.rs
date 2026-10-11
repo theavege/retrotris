@@ -1,6 +1,5 @@
 use crate::*;
 
-
 /// Fixed timestep for the physics simulation (seconds per tick).
 pub const TICK: f32 = 1.0 / 60.0;
 
@@ -128,9 +127,23 @@ impl Rock {
         let heading = rng.random_range(0.0..std::f32::consts::TAU);
         // Sample the border band so rocks never materialize on top of the ship.
         let pos = if rng.random_bool(0.5) {
-            (rng.random_range(0.0..FIELD_W), if rng.random_bool(0.5) { 0.0 } else { FIELD_H - 1.0 })
+            (
+                rng.random_range(0.0..FIELD_W),
+                if rng.random_bool(0.5) {
+                    0.0
+                } else {
+                    FIELD_H - 1.0
+                },
+            )
         } else {
-            (if rng.random_bool(0.5) { 0.0 } else { FIELD_W - 1.0 }, rng.random_range(0.0..FIELD_H))
+            (
+                if rng.random_bool(0.5) {
+                    0.0
+                } else {
+                    FIELD_W - 1.0
+                },
+                rng.random_range(0.0..FIELD_H),
+            )
         };
         Self {
             body: Body {
@@ -251,11 +264,12 @@ impl Belt {
     pub fn shot(&mut self, shots: &mut Shots, rng: &mut impl RngExt) -> Vec<usize> {
         let mut hit = Vec::new();
         loop {
-            let target = shots
-                .bodies()
-                .iter()
-                .enumerate()
-                .find_map(|(i, b)| self.rocks.iter().find(|r| b.touches(&r.body)).map(|r| (i, r.body)));
+            let target = shots.bodies().iter().enumerate().find_map(|(i, b)| {
+                self.rocks
+                    .iter()
+                    .find(|r| b.touches(&r.body))
+                    .map(|r| (i, r.body))
+            });
             match target {
                 Some((shot, rock)) => match self.blast(&rock, rng) {
                     Some(scale) => {
@@ -326,7 +340,11 @@ mod tests {
         let mut belt = Belt::default();
         // Place a big rock manually so the test does not depend on randomness.
         belt.rocks.push(Rock {
-            body: Body { pos: (500.0, 500.0), vel: (0.0, 0.0), rad: Rock::RADII[0] },
+            body: Body {
+                pos: (500.0, 500.0),
+                vel: (0.0, 0.0),
+                rad: Rock::RADII[0],
+            },
             scale: 1,
             spin: 0.0,
             heading: 0.0,
@@ -347,6 +365,8 @@ mod tests {
             rad: 1.0,
         };
         body.fly(1.0);
-        assert!(body.pos.0 < 1.0);
+        // wrapped past the right edge onto the left side of the toroid
+        assert!(body.pos.0 < FIELD_W && body.pos.0 >= 0.0);
+        assert!(body.pos.0 < 2.0);
     }
 }

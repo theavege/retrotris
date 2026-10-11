@@ -76,11 +76,12 @@ impl Game {
 #[derive(Default)]
 pub struct Model(Game);
 
+/// Saves the record of the game currently connected to the window; set by
+/// `Console::connect` and consumed when returning to the menu.
+type SaveFn = std::cell::Cell<Option<Box<dyn Fn(&str)>>>;
+
 thread_local! {
-    /// Saves the record of the game currently connected to the window; set by
-    /// `Console::connect` and consumed when returning to the menu.
-    static CURRENT: std::cell::Cell<Option<Box<dyn Fn(&str)>>> =
-        const { std::cell::Cell::new(None) };
+    static CURRENT: SaveFn = const { std::cell::Cell::new(None) };
 }
 
 /// Path of the save file for the game shown in `window` (see `Console::connect`).
