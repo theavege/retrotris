@@ -10,7 +10,12 @@ pub type LevelSpec = &'static [&'static str];
 /// A hand-picked set of small beginner levels (public-domain style layouts).
 pub const LEVELS: &[LevelSpec] = &[
     &[
-        "########", "#      #", "#.$$$ @#", "#  ....#", "#      #", "########",
+        "########",
+        "#      #",
+        "#.$$ .@#",
+        "#  ....#",
+        "#   .  #",
+        "########",
     ],
     &[
         "##########",
@@ -174,5 +179,68 @@ impl Score {
         self.best += 1;
         self.level = (self.level + 1) % level_count;
         self.level
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_shipped_level_is_solvable_shape() {
+        // each level parses and has exactly as many crates as goal squares
+        for (i, spec) in LEVELS.iter().enumerate() {
+            let boxes = spec
+                .iter()
+                .flat_map(|line| line.chars())
+                .filter(|&c| c == '$' || c == '*')
+                .count();
+            let goals = spec
+                .iter()
+                .flat_map(|line| line.chars())
+                .filter(|&c| c == '.' || c == '*' || c == '+')
+                .count();
+            assert_eq!(boxes, goals, "level {i}: crates != goals");
+            assert!(boxes > 0, "level {i}: no crates");
+            assert!(
+                spec.concat().contains('@') || spec.concat().contains('+'),
+                "level {i}: no player"
+            );
+        }
+    }
+
+    #[test]
+    fn pushes_move_box_and_count_stats() {
+        let mut b = Sokoban::load(&["#####", "#@$.#", "#####"]);
+        assert!(!b.solved());
+        assert!(b.push(0, 1)); // player steps onto the box, box goes to goal
+        assert!(b.solved());
+        assert_eq!(b.stats(), (1, 1));
+    }
+
+    #[test]
+    fn cannot_push_two_boxes_in_a_row() {
+        let mut b = Sokoban::load(&["######", "#@$$.#", "######"]);
+        assert!(!b.push(0, 1)); // second box blocks the push
+        assert_eq!(b.player(), (1, 1)); // nothing moved
+        assert_eq!(b.stats(), (0, 0));
+    }
+
+    #[test]
+    fn horizontal_step_does_not_wrap_rows() {
+        // player at the right edge of a short row; stepping right must fail
+        // instead of teleporting to the next row.
+        let mut b = Sokoban::load(&["#@#", "###", "###"]);
+        assert!(!b.push(0, 1));
+        assert_eq!(b.player(), (0, 1));
+    }
+
+    #[test]
+    fn walls_block_movement() {
+        let mut b = Sokoban::load(&["#####", "#@#.#", "#####"]);
+        assert!(!b.push(0, 1)); // wall right ahead ('#')
+        assert!(!b.push(0, -1)); // wall left ('#')
+        assert_eq!(b.player(), (1, 1)); // boxed in, nothing moved
+        assert_eq!(b.stats(), (0, 0));
     }
 }

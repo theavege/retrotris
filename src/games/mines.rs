@@ -119,6 +119,9 @@ impl Model {
             2 => self.board.chord(r, c, &mut rng),
             _ => false,
         };
+        if self.board.won {
+            self.board.clear_flags(); // leftover flags must not block the win
+        }
         if !changed {
             return;
         }

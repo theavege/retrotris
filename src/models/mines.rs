@@ -53,6 +53,10 @@ impl Board {
     pub fn coords(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         (0..self.cells.len()).map(|i| (i / self.cols, i % self.cols))
     }
+    /// Public neighbor list (used by chording and tests).
+    pub fn neighbors_of(&self, r: usize, c: usize) -> Vec<(usize, usize)> {
+        self.neighbors(r, c)
+    }
     fn neighbors(&self, r: usize, c: usize) -> Vec<(usize, usize)> {
         let mut out = Vec::with_capacity(8);
         for dr in -1isize..=1 {
@@ -186,6 +190,16 @@ impl Board {
             self.won = true;
         }
     }
+    /// Drop all flags: a wrong flag would otherwise block the win check and
+    /// make perfectly cleared boards unwinnable.
+    pub fn clear_flags(&mut self) {
+        for cell in &mut self.cells {
+            cell.flag = false;
+        }
+        if !self.lost {
+            self.check_win();
+        }
+    }
 }
 
 /// Game score: elapsed seconds, remaining flags and persisted best time
@@ -211,5 +225,82 @@ impl Score {
             return true;
         }
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_click_is_always_safe() {
+        // 3x3 board with 8 mines: the only safe cell is the one clicked.
+        let mut rng = rand::rng();
+        for r in 0..3 {
+            for c in 0..3 {
+                let mut b = Board::new(3, 3, 8);
+                assert!(b.open(r, c, &mut rng));
+                assert!(!b.lost, "first click at ({r},{c}) hit a mine");
+            }
+        }
+    }
+
+    #[test]
+    fn flags_toggle_and_count_down_remaining() {
+        let mut rng = rand::rng();
+        let mut b = Board::new(9, 9, 2);
+        b.open(0, 0, &mut rng); // trigger mine placement far from the corner
+        if b.won {
+            return; // degenerate draw: every cell is already revealed
+        }
+        let before = b.remaining();
+        assert!(b.toggle_flag(4, 4));
+        assert_eq!(b.remaining(), before - 1);
+        assert!(b.toggle_flag(4, 4)); // unflag
+        assert_eq!(b.remaining(), before);
+        // flagged cells cannot be opened
+        b.toggle_flag(4, 4);
+        assert!(!b.open(4, 4, &mut rng));
+    }
+
+    #[test]
+    fn chord_only_fires_when_flags_match_number() {
+        let mut rng = rand::rng();
+        // 9x9 with one mine: flood fill opens everything except the mine ring,
+        // which shows numbers after the first click at the opposite corner.
+        let mut b = Board::new(9, 9, 1);
+        b.open(0, 0, &mut rng);
+        let Some(num) = b
+            .coords()
+            .find(|&(r, c)| b.cell(r, c).open && b.cell(r, c).adj > 0)
+        else {
+            return; // mine landed next to the safe zone: board already won
+        };
+        // without the correct flag, chord does nothing
+        assert!(!b.chord(num.0, num.1, &mut rng));
+        // flag the single mine neighbor and chord again
+        let mine = b
+            .neighbors_of(num.0, num.1)
+            .into_iter()
+            .find(|&(r, c)| b.cell(r, c).mine)
+            .expect("mine neighbor");
+        b.toggle_flag(mine.0, mine.1);
+        assert!(b.chord(num.0, num.1, &mut rng));
+        assert!(b.won);
+    }
+
+    #[test]
+    fn score_finish_keeps_low_best_time() {
+        let mut s = Score::default();
+        s.tick(12.4);
+        assert!(s.finish()); // first win always records
+        assert_eq!(s.best, 12);
+        s.reset();
+        s.tick(20.0);
+        assert!(!s.finish()); // slower: not a new best
+        s.reset();
+        s.tick(5.6);
+        assert!(s.finish());
+        assert_eq!(s.best, 6);
     }
 }

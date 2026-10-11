@@ -29,13 +29,7 @@ impl Model {
         self.state = State::Playing;
     }
     fn set_apple(&mut self) {
-        loop {
-            let apple @ Apple(x, y) = Apple::new(self.field);
-            if !self.snake.body.contains(&(x, y)) {
-                self.apple = apple;
-                break;
-            }
-        }
+        self.apple = Apple::new(&self.snake, self.field);
     }
     fn draw_score(&self, window: &Window) {
         let line = format!(
