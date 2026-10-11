@@ -12,6 +12,21 @@ pub enum Game {
     Bird,
     Pong,
     Runner,
+    Arkanoid,
+    Invaders,
+    Mines,
+    Sokoban,
+    Asteroids,
+    Mario,
+}
+
+/// Saves the live game state's record and reconnects the window handlers to
+/// the menu model. Used by every game's "back to menu" action.
+pub fn to_menu(window: &mut Window) {
+    if let Some(saver) = CURRENT.take() {
+        saver(&current_path(window));
+    }
+    Model::connect(window);
 }
 
 impl Game {
@@ -21,7 +36,13 @@ impl Game {
             Self::Snake => Self::Bird,
             Self::Bird => Self::Pong,
             Self::Pong => Self::Runner,
-            Self::Runner => Self::Tetris,
+            Self::Runner => Self::Arkanoid,
+            Self::Arkanoid => Self::Invaders,
+            Self::Invaders => Self::Mines,
+            Self::Mines => Self::Sokoban,
+            Self::Sokoban => Self::Asteroids,
+            Self::Asteroids => Self::Mario,
+            Self::Mario => Self::Tetris,
         }
     }
     fn to_str(&self) -> &str {
@@ -31,6 +52,12 @@ impl Game {
             Self::Bird => "Bird",
             Self::Pong => "Pong",
             Self::Runner => "Runner",
+            Self::Arkanoid => "Arkanoid",
+            Self::Invaders => "Invaders",
+            Self::Mines => "Minesweeper",
+            Self::Sokoban => "Sokoban",
+            Self::Asteroids => "Asteroids",
+            Self::Mario => "Mario",
         }
     }
     fn to_play(&self, window: &mut Window) {
@@ -40,12 +67,39 @@ impl Game {
             Self::Bird => games::bird::Model::connect(window),
             Self::Pong => games::pong::Model::connect(window),
             Self::Runner => games::runner::Model::connect(window),
+            Self::Arkanoid => games::arkanoid::Model::connect(window),
+            Self::Invaders => games::invaders::Model::connect(window),
+            Self::Mines => games::mines::Model::connect(window),
+            Self::Sokoban => games::sokoban::Model::connect(window),
+            Self::Asteroids => games::asteroid::Model::connect(window),
+            Self::Mario => games::mario::Model::connect(window),
         }
     }
 }
 
 #[derive(Default)]
 pub struct Model(Game);
+
+/// Saves the record of the game currently connected to the window; set by
+/// `Console::connect` and consumed when returning to the menu.
+type SaveFn = std::cell::Cell<Option<Box<dyn Fn(&str)>>>;
+
+thread_local! {
+    static CURRENT: SaveFn = const { std::cell::Cell::new(None) };
+}
+
+/// Path of the save file for the game shown in `window` (see `Console::connect`).
+fn current_path(window: &Window) -> String {
+    format!(
+        "{}/.{}",
+        std::env::var(match cfg!(target_os = "windows") {
+            true => "HOMEPATH",
+            false => "HOME",
+        })
+        .unwrap(),
+        window.xclass().unwrap(),
+    )
+}
 
 impl Console for Model {
     fn load(&mut self, _path: &str) {}

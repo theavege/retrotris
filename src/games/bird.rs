@@ -1,44 +1,13 @@
 use crate::gui::*;
+use crate::models::bird::*;
 
-const DOWN: i32 = 1;
-const UP: i32 = -8;
-const BIRD: i32 = 60;
-const PIPE_WIDTH: i32 = BIRD * 2;
-const PIPE_GAP: i32 = BIRD * 5;
-const PIPE_SPEED: i32 = BIRD / 15;
-
-#[derive(Default)]
-struct Bird {
-    position: (i32, i32),
-    velocity: i32,
-}
-
-impl Bird {
-    fn new(height: i32) -> Self {
-        Self {
-            position: (100, height / 2),
-            velocity: 0,
-        }
-    }
-}
-
-struct Pipe {
-    x: i32,
-    gap_center_y: i32,
-    scored: bool,
-}
-
-impl Pipe {
-    fn top_rect(&self) -> (i32, i32, i32, i32) {
-        let top_height = self.gap_center_y - (PIPE_GAP / 2);
-        (self.x, 0, PIPE_WIDTH, top_height)
-    }
-
-    fn bottom_rect(&self, height: i32) -> (i32, i32, i32, i32) {
-        let bottom_y = self.gap_center_y + (PIPE_GAP / 2);
-        let bottom_height = height - bottom_y;
-        (self.x, bottom_y, PIPE_WIDTH, bottom_height)
-    }
+#[derive(Default, PartialEq)]
+enum State {
+    #[default]
+    Menu,
+    Playing,
+    Paused,
+    GameOver,
 }
 
 #[derive(Default)]
@@ -47,160 +16,275 @@ pub struct Model {
     bird: Bird,
     pipes: Vec<Pipe>,
     score: i32,
-    play: bool,
+    best: i32,
+    state: State,
     timer: f32,
+    /// One flap input may be buffered while airborne and consumed on the next
+    /// update tick, so fast taps during lag are never dropped.
+    flap_buffered: bool,
 }
 
 impl Model {
-    fn reset(&mut self) {
+    fn scaled(&self) -> Scaled {
+        Config::default().scale(self.field)
+    }
+    fn restart(&mut self) {
         self.bird = Bird::new(self.field.1);
         self.pipes = Vec::new();
         self.score = 0;
+        // Fair start: the first pipe spawns only after a full interval,
+        // giving the player time to settle into a rhythm.
+        self.timer = 0.0;
+        self.flap_buffered = false;
+        self.state = State::Playing;
+    }
+    fn die(&mut self) {
+        self.state = State::GameOver;
+        if self.score > self.best {
+            self.best = self.score;
+        }
+    }
+    fn flap(&mut self) {
+        match self.state {
+            State::Menu | State::GameOver => self.restart(),
+            State::Paused => self.state = State::Playing,
+            State::Playing => self.flap_buffered = true,
+        }
+    }
+    fn draw_score(&self, window: &Window) {
+        let line = format!("SCORE: {}   BEST: {}", self.score, self.best);
+        let (w, h) = draw::measure(&line, false);
+        draw::set_font(Font::CourierBold, 16);
+        draw::set_draw_color(Color::Foreground);
+        draw::draw_text2(
+            &line,
+            window.w() / 2 - w / 2,
+            PAD,
+            w,
+            h + i32::from(h == 0),
+            Align::Left,
+        );
+    }
+    fn draw_bird(&self) {
+        let s = self.scaled();
+        let r = s.bird_radius;
+        let x = s.bird_x;
+        let y = self.bird.y;
+        // Tilt the bird by its vertical velocity: nose up when rising,
+        // nose down when falling (classic Floppy Bird feel).
+        let tilt = self.bird.tilt(&s);
+        let (sin, cos) = (tilt.sin(), tilt.cos());
+        let px = |dx: f32, dy: f32| -> (i32, i32) {
+            (
+                (x + dx * cos - dy * sin) as i32,
+                (y + dx * sin + dy * cos) as i32,
+            )
+        };
+        // body (bright yellow circle with a dark outline -> pops on base2 bg)
+        draw::draw_circle_fill(x as i32, y as i32, (2.0 * r) as i32, sol::YELLOW);
+        draw::set_draw_color(sol::BASE02);
+        draw::draw_circle(x as f64, y as f64, 2.0 * r as f64);
+        // wing (rotates with the body)
+        let (wx, wy) = px(-r * 0.35, 0.0);
+        draw::draw_circle_fill(wx, wy, (0.9 * r) as i32, sol::ORANGE);
+        // eye
+        let (ex, ey) = px(r * 0.4, -r * 0.35);
+        draw::draw_circle_fill(ex, ey, (0.36 * r) as i32, Color::Background);
+        draw::set_draw_color(sol::BASE03);
+        draw::draw_circle(ex as f64, ey as f64, 0.36 * r as f64);
+        // pupil
+        draw::draw_circle_fill(ex + 1, ey, (0.14 * r).max(1.0) as i32, sol::BASE03);
+        // beak
+        let (bx, by) = px(r * 0.9, r * 0.1);
+        draw::draw_circle_fill(bx, by, (0.5 * r) as i32, sol::RED);
+    }
+    fn draw_pipes(&self) {
+        let h = self.field.1 as f32;
+        for pipe in &self.pipes {
+            let (tx, ty, tw, th) = pipe.top_rect();
+            let (bx, by, bw, bh) = pipe.bottom_rect(h);
+            // shafts (dark green fill + darker edge lines for contrast)
+            for (px_, py_, pw_, ph_) in [
+                (tx as i32, ty as i32, tw as i32, th as i32),
+                (bx as i32, by as i32, bw as i32, bh as i32),
+            ] {
+                draw::draw_rect_fill(px_, py_, pw_, ph_, sol::GREEN);
+                draw::set_draw_color(sol::BASE02);
+                draw::draw_rect(px_, py_, pw_, ph_);
+            }
+            // caps (distinct lip at each gap edge, violet for max contrast)
+            let cap_h = (tw * 0.3).max(6.0) as i32;
+            let over = (tw * 0.1) as i32;
+            if th > 0.0 {
+                draw::draw_rect_fill(
+                    tx as i32 - over,
+                    (ty + th) as i32 - cap_h,
+                    tw as i32 + 2 * over,
+                    cap_h,
+                    sol::VIOLET,
+                );
+            }
+            if bh > 0.0 {
+                draw::draw_rect_fill(
+                    bx as i32 - over,
+                    by as i32,
+                    bw as i32 + 2 * over,
+                    cap_h,
+                    sol::VIOLET,
+                );
+            }
+        }
     }
 }
 
 impl Console for Model {
-    fn load(&mut self, _path: &str) {}
-    fn exit(&self, _path: &str) {}
+    fn load(&mut self, path: &str) {
+        if let Ok(data) = std::fs::read_to_string(path) {
+            self.best = data.trim().parse().unwrap_or_default();
+        }
+    }
+    fn exit(&self, path: &str) {
+        let _ = std::fs::write(path, self.best.to_string());
+    }
     fn handle(&mut self, window: &mut Window, event: Event) -> bool {
         match event {
             Event::Focus => true,
             Event::Resize => {
-                self.play = false;
                 self.field = (window.w(), window.h());
+                // A mid-game resize changes all pixel-space geometry, so pause
+                // instead of letting the bird die against a shifted hitbox.
+                if self.state == State::Playing {
+                    self.state = State::Paused;
+                }
                 true
             }
-            Event::KeyDown => {
-                match event_key() {
-                    Key::Escape => match self.play {
-                        true => self.play = false,
-                        false => crate::Model::connect(window),
+            Event::Push | Event::KeyDown => {
+                const SPACE: Key = Key::from_char(' ');
+                const W: Key = Key::from_char('w');
+                const P: Key = Key::from_char('p');
+                let key = match event {
+                    Event::Push => None,
+                    _ => Some(event_key()),
+                };
+                match key {
+                    None => self.flap(),
+                    Some(Key::Escape) => match self.state {
+                        State::Playing => self.state = State::Paused,
+                        State::Paused => self.state = State::Playing,
+                        State::GameOver => self.state = State::Menu,
+                        State::Menu => crate::to_menu(window),
                     },
-                    Key::Enter => {
-                        if !self.play {
-                            self.reset();
-                            self.play = true;
-                        }
-                    }
-                    Key::Up => self.bird.velocity = UP,
+                    Some(Key::Enter) | Some(Key::Up) | Some(SPACE) | Some(W) => self.flap(),
+                    Some(P) => match self.state {
+                        State::Playing => self.state = State::Paused,
+                        State::Paused => self.state = State::Playing,
+                        _ => return false,
+                    },
                     _ => return false,
                 };
+                window.redraw();
                 true
             }
             _ => false,
         }
     }
     fn update(&mut self, dt: f32) {
-        if !self.play {
+        if self.state != State::Playing {
             return;
         }
-        self.bird.velocity += DOWN;
-        self.bird.position.1 += self.bird.velocity;
+        // Clamp dt so a stalled tab / window drag cannot teleport the bird.
+        let dt = dt.min(0.1);
+        let config = Config::default();
+        let s = config.scale(self.field);
+        let field_h = self.field.1 as f32;
 
+        if self.flap_buffered {
+            self.bird.flap(&s);
+            self.flap_buffered = false;
+        }
+        self.bird.update(dt, &s);
+
+        let speed = s.pipe_speed * speed_multiplier(&config, self.score);
         for pipe in &mut self.pipes {
-            pipe.x -= PIPE_SPEED;
+            pipe.x -= speed * dt;
         }
 
         self.timer += dt;
-        if self.timer > 1.5 {
+        if self.timer >= s.pipe_interval {
+            self.timer = 0.0;
+            let gap = gap_for_score(&s, &config, field_h, self.score);
             self.pipes.push(Pipe {
-                x: self.field.0,
-                gap_center_y: rand::rng()
-                    .random_range((PIPE_GAP / 2)..(self.field.1 - (PIPE_GAP / 2))),
+                x: self.field.0 as f32,
+                width: s.pipe_width,
+                gap_center_y: random_gap_center(field_h, gap),
+                gap,
                 scored: false,
             });
-            self.timer = 0.0;
         }
 
-        self.pipes.retain(|pipe| pipe.x > -PIPE_WIDTH);
+        self.pipes
+            .retain(|pipe| pipe.x + pipe.width > -s.pipe_width);
 
         for pipe in &mut self.pipes {
-            if !pipe.scored && self.bird.position.0 > pipe.x + PIPE_WIDTH {
+            if !pipe.scored && s.bird_x > pipe.x + pipe.width {
                 self.score += 1;
                 pipe.scored = true;
             }
         }
 
-        if self.bird.position.1 - BIRD < 0 || self.bird.position.1 + BIRD > self.field.1 {
-            self.play = false;
+        // Ceiling is a soft wall (bird clamps at the top but survives),
+        // the floor and pipes are fatal.
+        if self.bird.y - s.bird_radius < 0.0 {
+            self.bird.y = s.bird_radius;
+            self.bird.velocity = self.bird.velocity.max(0.0);
         }
-
-        for pipe in &self.pipes {
-            let bird_collides =
-                check_collision_circle_rec_manual(self.bird.position, BIRD, pipe.top_rect())
-                    || check_collision_circle_rec_manual(
-                        self.bird.position,
-                        BIRD,
-                        pipe.bottom_rect(self.field.1),
-                    );
-
-            if bird_collides {
-                self.play = false;
-                break;
-            }
+        if self.bird.y + s.bird_radius >= field_h
+            || self
+                .pipes
+                .iter()
+                .any(|pipe| pipe.collides(s.bird_x, self.bird.y, s.bird_radius, field_h))
+        {
+            self.die();
         }
     }
     fn draw(&self, window: &mut Window) {
-        if self.play {
-            draw::draw_rect_fill(0, 0, window.width(), window.height(), Color::Background);
-            for pipe in &self.pipes {
-                let top_rect = pipe.top_rect();
-                let bottom_rect = pipe.bottom_rect(self.field.1);
-                draw::draw_rect_fill(top_rect.0, top_rect.1, top_rect.2, top_rect.3, Color::Green);
-                draw::draw_rect_fill(
-                    bottom_rect.0,
-                    bottom_rect.1,
-                    bottom_rect.2,
-                    bottom_rect.3,
-                    Color::Green,
-                );
-            }
-
-            draw::draw_circle_fill(
-                self.bird.position.0,
-                self.bird.position.1,
-                BIRD,
-                Color::Selection,
-            );
-
-            draw::set_draw_color(Color::Background2);
-            draw::draw_text2(
-                &self.score.to_string(),
-                self.bird.position.0,
-                self.bird.position.1,
-                BIRD,
-                BIRD,
-                Align::Center,
-            );
-        } else {
-            window.draw_welcome(
+        match self.state {
+            State::Menu => window.draw_welcome(
                 "Bird",
                 &[
+                    &["BEST SCORE", &self.best.to_string()],
                     &["PRESS ENTER", "for play"],
                     &["PRESS ESC", "for exit"],
-                    &["PRESS UP", "for fly"],
+                    &["PRESS UP / SPACE / CLICK", "for fly"],
                 ],
-            );
+            ),
+            State::Playing | State::Paused => {
+                draw::draw_rect_fill(0, 0, window.width(), window.height(), Color::Background);
+                self.draw_pipes();
+                self.draw_bird();
+                self.draw_score(window);
+                if self.state == State::Paused {
+                    window.draw_overlay("PAUSED", "PRESS ENTER to continue", sol::VIOLET);
+                }
+            }
+            State::GameOver => {
+                draw::draw_rect_fill(0, 0, window.width(), window.height(), Color::Background);
+                self.draw_pipes();
+                self.draw_bird();
+                window.draw_overlay(
+                    "GAME OVER",
+                    &format!("SCORE: {}   BEST: {}", self.score, self.best),
+                    sol::RED,
+                );
+                window.draw_text(
+                    "PRESS ENTER for retry, ESC for menu",
+                    0,
+                    window.h() / 2 + HEIGHT,
+                    Color::Foreground,
+                    Align::Center,
+                    20,
+                );
+            }
         }
     }
-}
-
-fn check_collision_circle_rec_manual(
-    position: (i32, i32),
-    size: i32,
-    rec: (i32, i32, i32, i32),
-) -> bool {
-    // Find the closest point on the rectangle to the center of the circle
-    let radius = size / 2;
-    let center = (position.0 + radius, position.1 + radius);
-    let closest_x = center.0.max(rec.0).min(rec.0 + rec.2);
-    let closest_y = center.1.max(rec.1).min(rec.1 + rec.3);
-
-    // Calculate the distance between the closest point and the circle's center
-    let distance_x = center.0 - closest_x;
-    let distance_y = center.1 - closest_y;
-    let distance_squared = (distance_x * distance_x) + (distance_y * distance_y);
-
-    // If the distance squared is less than the circle's radius squared, there is a collision
-    distance_squared < (radius * radius)
 }

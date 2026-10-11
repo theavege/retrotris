@@ -1,201 +1,308 @@
-use {crate::gui::*, crate::models::tetris::*};
+use crate::gui::*;
+use crate::models::tetris::*;
 
-const COLORS: [Color; 7] = [
-    Color::Green,
-    Color::Cyan,
-    Color::Blue,
-    Color::from_hex(0x6C71C4), //violet
-    Color::Magenta,
-    Color::Yellow,
-    Color::from_hex(0xCB4B16), //orange
+/// Solarized-flavoured tetromino palette, indexed by piece kind (O I S Z T J L).
+const COLORS: [Color; PIECE_COUNT] = [
+    sol::YELLOW,  // yellow  - O
+    sol::BLUE,    // blue    - I
+    sol::GREEN,   // green   - S
+    sol::ORANGE,  // orange  - Z
+    sol::VIOLET,  // violet  - T
+    sol::CYAN,    // cyan    - J
+    sol::MAGENTA, // magenta - L
 ];
+/// Soft-drop points per cell, hard-drop points per cell.
+const SOFT_DROP_PTS: i32 = 1;
+const HARD_DROP_PTS: i32 = 2;
+/// Width of the side panels (HOLD / NEXT / stats) in cells.
+const PANEL_CELLS: i32 = 5;
+
+#[derive(Default, PartialEq)]
+enum State {
+    #[default]
+    Menu,
+    Playing,
+    Paused,
+    GameOver,
+}
 
 #[derive(Default)]
 pub struct Model {
+    tetris: Tetris,
     score: Score,
-    grid: Grid,
-    curr: Figure,
-    next: Next,
-    play: bool,
+    state: State,
     timer: f32,
 }
 
 impl Model {
-    pub fn next(&mut self) {
-        self.curr = Figure::new(10, 0, self.next.get(), 0);
-        self.next = Next::default();
+    fn restart(&mut self) {
+        self.tetris.reset();
+        self.score.reset();
+        self.timer = 0.0;
+        self.state = State::Playing;
     }
-    pub fn shift(&mut self, direction: (i32, usize)) {
-        if let Some(temp) = self.grid.check(self.curr.shift(direction)) {
-            self.curr = temp;
-        }
-    }
-    pub fn rotate(&mut self) {
-        if let Some(temp) = self.grid.check(self.curr.rotate()) {
-            self.curr = temp;
-        }
-    }
-    pub fn down(&mut self) -> bool {
-        if let Some(temp) = self.grid.check(self.curr.shift((0, 1))) {
-            self.curr = temp;
-        } else {
-            for (x, y) in self.curr.coor {
-                if y == 0 {
-                    return false;
-                } else {
-                    self.grid.0[y][x as usize] = Some(self.curr.shape.0);
-                }
+    /// Gravity tick plus line clearing and drop scoring.
+    fn tick(&mut self) {
+        let before = self.tetris.curr.y;
+        match self.tetris.update() {
+            None => {
+                self.state = State::GameOver;
+                return;
             }
-            self.next();
-        };
-        true
+            Some(cleared) => self.after_lock(cleared),
+        }
+        if self.tetris.curr.y > before {
+            self.score.current += SOFT_DROP_PTS;
+        }
+    }
+    fn after_lock(&mut self, cleared: Vec<usize>) {
+        if self.tetris.dropped {
+            self.score.current += HARD_DROP_PTS
+                * (FIELD_ROWS as i32 - self.tetris.grid.ghost(&self.tetris.curr).y).max(0);
+        }
+        if !cleared.is_empty() {
+            self.score.add_lines(cleared.len());
+        }
+    }
+    fn draw_hud(&self, window: &Window, cell: i32) {
+        let line = format!(
+            "SCORE {}   BEST {}   LEVEL {}",
+            self.score.current,
+            self.score.best,
+            self.score.level() + 1
+        );
+        let (w, h) = draw::measure(&line, false);
+        draw::set_font(Font::CourierBold, 16);
+        draw::set_draw_color(Color::Foreground);
+        draw::draw_text2(&line, window.w() / 2 - w / 2, PAD, w, h, Align::Left);
+        let _ = cell;
     }
 }
 
 impl Console for Model {
-    fn load(&mut self, _path: &str) {}
-    fn exit(&self, _path: &str) {}
+    fn load(&mut self, path: &str) {
+        if let Ok(data) = std::fs::read_to_string(path) {
+            self.score.best = data.trim().parse().unwrap_or_default();
+        }
+    }
+    fn exit(&self, path: &str) {
+        let _ = std::fs::write(path, self.score.best.to_string());
+    }
     fn handle(&mut self, window: &mut Window, event: Event) -> bool {
         match event {
             Event::Focus => true,
+            Event::Resize => {
+                if self.state == State::Playing {
+                    self.state = State::Paused;
+                }
+                true
+            }
             Event::KeyDown => {
                 const LEFT: Key = Key::from_char('a');
                 const RIGHT: Key = Key::from_char('d');
                 const UP: Key = Key::from_char('w');
                 const DOWN: Key = Key::from_char('s');
+                const SPACE: Key = Key::from_char(' ');
+                const C: Key = Key::from_char('c');
                 match event_key() {
-                    Key::Escape => match self.play {
-                        true => self.play = false,
-                        false => crate::Model::connect(window),
+                    Key::Escape => match self.state {
+                        State::Playing => self.state = State::Paused,
+                        State::Paused => self.state = State::Playing,
+                        State::GameOver => self.state = State::Menu,
+                        State::Menu => crate::to_menu(window),
                     },
-                    Key::Enter => {
-                        self.next();
-                        self.grid = Grid::default();
-                        self.play = !self.play;
+                    Key::Enter | SPACE => match self.state {
+                        State::Menu | State::GameOver => self.restart(),
+                        State::Paused => self.state = State::Playing,
+                        State::Playing => self.state = State::Paused,
+                    },
+                    Key::Up | UP => {
+                        if self.state == State::Playing {
+                            self.tetris.rotate(true)
+                        }
                     }
-                    Key::Up | UP => self.rotate(),
                     Key::Down | DOWN => {
-                        self.down();
+                        if self.state == State::Playing {
+                            match self.tetris.soft_drop() {
+                                None => self.state = State::GameOver,
+                                Some(cleared) => self.after_lock(cleared),
+                            }
+                        }
                     }
-                    Key::Left | LEFT => self.shift((-1, 0)),
-                    Key::Right | RIGHT => self.shift((1, 0)),
+                    Key::Left | LEFT => {
+                        if self.state == State::Playing {
+                            self.tetris.move_x(-1)
+                        }
+                    }
+                    Key::Right | RIGHT => {
+                        if self.state == State::Playing {
+                            self.tetris.move_x(1)
+                        }
+                    }
+                    Key::ShiftL | Key::ShiftR => {
+                        if self.state == State::Playing {
+                            match self.tetris.hard_drop() {
+                                None => self.state = State::GameOver,
+                                Some(cleared) => self.after_lock(cleared),
+                            }
+                        }
+                    }
+                    Key::ControlL | Key::ControlR | C => {
+                        if self.state == State::Playing {
+                            self.tetris.hold()
+                        }
+                    }
                     _ => return false,
                 };
+                window.redraw();
                 true
             }
             _ => false,
         }
     }
     fn update(&mut self, dt: f32) {
-        if !self.play {
+        if self.state != State::Playing {
             return;
         }
         self.timer += dt;
-        if self.timer < 1.0 / (3.0 + self.score.get().1 as f32) {
+        if self.timer < self.score.gravity() {
             return;
         }
         self.timer = 0.0;
-        for line in self.grid.find_full_line() {
-            self.grid.0.remove(line);
-            self.grid.0.insert(0, [None; GRID_WIDTH]);
-            self.score.inc();
-        }
-        if !self.down() {
-            self.play = false;
-        }
-        self.score.update();
+        self.tick();
     }
     fn draw(&self, window: &mut Window) {
         window.draw_background(Color::Background);
-        if self.play {
-            draw::draw_rect_fill(0, 0, window.width(), window.height(), Color::Foreground);
-            let (x, y, h) = draw_field(window, &self.grid.draw(&self.curr));
-            let (x, y) = draw_next(x, y, h, self.next.draw());
-            draw_score(x, y, h, self.score.get().0);
-        } else {
-            window.draw_welcome(
+        match self.state {
+            State::Menu => window.draw_welcome(
                 "Tetris",
-                &[&["PRESS ENTER", "for play"], &["PRESS ESC", "for exit"]],
-            );
+                &[
+                    &["BEST SCORE", &self.score.best.to_string()],
+                    &["PRESS ENTER", "for play"],
+                    &["PRESS ESC", "for exit"],
+                ],
+            ),
+            State::Playing | State::Paused => {
+                // Cell size chosen so field + side panels fit the window.
+                let cell = (window.width() / (FIELD_COLS as i32 + 2 * PANEL_CELLS))
+                    .min(window.height() / FIELD_ROWS as i32);
+                let field_w = cell * FIELD_COLS as i32;
+                let x0 = (window.width() - field_w) / 2;
+                let y0 = (window.height() - cell * FIELD_ROWS as i32) / 2;
+                // Playfield frame + empty cells
+                draw::draw_rect_fill(
+                    x0 - 2,
+                    y0 - 2,
+                    field_w + 4,
+                    cell * FIELD_ROWS as i32 + 4,
+                    Color::Foreground,
+                );
+                for y in 0..FIELD_ROWS as i32 {
+                    for x in 0..FIELD_COLS as i32 {
+                        draw::draw_rect_fill(
+                            x0 + x * cell + 1,
+                            y0 + y * cell + 1,
+                            cell - 2,
+                            cell - 2,
+                            Color::Background2,
+                        );
+                    }
+                }
+                // Ghost piece (outline preview of the landing position)
+                let ghost = self.tetris.ghost();
+                for (gx, gy) in ghost.cells() {
+                    if gy >= 0 {
+                        draw::set_draw_color(COLORS[ghost.kind]);
+                        draw::draw_rect(x0 + gx * cell + 3, y0 + gy * cell + 3, cell - 6, cell - 6);
+                    }
+                }
+                // Locked cells + active piece
+                for (y, row) in self.tetris.grid.draw(&self.tetris.curr).iter().enumerate() {
+                    for (x, cell_kind) in row.iter().enumerate() {
+                        if let Some(kind) = cell_kind {
+                            draw::draw_rect_fill(
+                                x0 + x as i32 * cell + 1,
+                                y0 + y as i32 * cell + 1,
+                                cell - 2,
+                                cell - 2,
+                                COLORS[*kind],
+                            );
+                        }
+                    }
+                }
+                self.draw_slot(
+                    "HOLD",
+                    x0 - cell * (PANEL_CELLS + 1),
+                    y0,
+                    cell,
+                    self.tetris.hold_kind,
+                    self.tetris.hold_used,
+                );
+                self.draw_slot(
+                    "NEXT",
+                    x0 + field_w + cell,
+                    y0,
+                    cell,
+                    Some(self.tetris.next_kind),
+                    false,
+                );
+                self.draw_hud(window, cell);
+                if self.state == State::Paused {
+                    window.draw_overlay("PAUSED", "PRESS ENTER to continue", sol::VIOLET);
+                }
+            }
+            State::GameOver => {
+                window.draw_overlay(
+                    "GAME OVER",
+                    &format!("SCORE: {}   BEST: {}", self.score.current, self.score.best),
+                    sol::RED,
+                );
+                window.draw_text(
+                    "PRESS ENTER for retry, ESC for menu",
+                    0,
+                    window.h() / 2 + HEIGHT,
+                    Color::Foreground,
+                    Align::Center,
+                    20,
+                );
+            }
         }
     }
 }
 
-fn draw_field(flex: &impl WidgetExt, table: &Vec<Vec<Option<usize>>>) -> (i32, i32, i32) {
-    let pad: i32 = 1;
-    let height: i32 =
-        (flex.height() - 2 * PAD - pad * (table.len() as i32 + 1)) / table.len() as i32;
-    let ww = height * table[0].len() as i32 + pad * (table[0].len() as i32 - 1) + 2 * PAD;
-    let hh = height * table.len() as i32 + pad * (table.len() as i32 - 1) + 2 * PAD;
-    let x = (flex.width() - ww) / 2;
-    let y = (flex.height() - hh) / 2;
-    let mut xx = x;
-    let mut yy = y;
-    let mut xxx = 0;
-    xx += PAD;
-    yy += PAD;
-    for line in table {
-        for cell in line {
+impl Model {
+    /// Small preview panel (HOLD or NEXT) with a title and a centered piece.
+    fn draw_slot(&self, title: &str, x: i32, y: i32, cell: i32, kind: Option<usize>, dim: bool) {
+        draw::set_font(Font::CourierBold, cell);
+        draw::set_draw_color(Color::Foreground);
+        draw::draw_text2(
+            title,
+            x,
+            y - cell - 4,
+            cell * PANEL_CELLS,
+            cell,
+            Align::Left,
+        );
+        let Some(kind) = kind else { return };
+        let color = if dim { sol::BASE1 } else { COLORS[kind] };
+        let cells = SHAPES[kind][0];
+        let (mut min_x, mut max_x, mut min_y, mut max_y) = (i32::MAX, 0, i32::MAX, 0);
+        for &(cx, cy) in &cells {
+            min_x = min_x.min(cx);
+            max_x = max_x.max(cx);
+            min_y = min_y.min(cy);
+            max_y = max_y.max(cy);
+        }
+        let off_x = x + (cell * PANEL_CELLS - (max_x - min_x + 1) * cell) / 2 - min_x * cell;
+        let off_y = y + (cell * PANEL_CELLS - (max_y - min_y + 1) * cell) / 2 - min_y * cell;
+        for (cx, cy) in cells {
             draw::draw_rect_fill(
-                xx,
-                yy,
-                height,
-                height,
-                match cell {
-                    None => Color::Background2,
-                    Some(idx) => COLORS[*idx],
-                },
+                off_x + cx * cell + 1,
+                off_y + cy * cell + 1,
+                cell - 2,
+                cell - 2,
+                color,
             );
-            xx += pad + height;
-            xxx = xx
         }
-        yy += pad + height;
-        xx = x + PAD;
-    }
-    (xxx + PAD, y, height)
-}
-
-fn draw_next(x: i32, y: i32, height: i32, table: [[Option<usize>; 4]; 4]) -> (i32, i32) {
-    let pad: i32 = 1;
-    let mut xx = x;
-    let mut yy = y;
-    xx += PAD;
-    yy += PAD;
-    for line in table {
-        for cell in line {
-            draw::draw_rect_fill(
-                xx,
-                yy,
-                height,
-                height,
-                match cell {
-                    None => Color::Foreground,
-                    Some(idx) => COLORS[idx],
-                },
-            );
-            xx += pad + height;
-        }
-        yy += pad + height;
-        xx = x + PAD;
-    }
-    (xx, yy)
-}
-
-fn draw_score(x: i32, y: i32, h: i32, v: i32) {
-    draw::set_draw_color(Color::Background2);
-    draw::set_font(Font::CourierBold, h);
-    let mut yy = y;
-    for line in [
-        &format!("Score:\t{v}"),
-        "PRESS:",
-        "  <UP>    rotate",
-        "  <DOWN>  fast down",
-        "  <LEFT>  move left",
-        "  <RIGHT> move right",
-        "  <ESC>   exit from game",
-    ] {
-        let (w, h) = draw::measure(line, false);
-        yy += h;
-        draw::draw_text2(line, x, yy, w, h, Align::Left);
     }
 }

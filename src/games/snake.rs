@@ -1,38 +1,76 @@
 use crate::gui::*;
 use crate::models::snake::*;
 
+#[derive(Default, PartialEq)]
+enum State {
+    #[default]
+    Menu,
+    Playing,
+    Paused,
+    GameOver,
+}
+
 #[derive(Default)]
 pub struct Model {
     field: (i32, i32),
     snake: Snake,
-    score: Score,
     apple: Apple,
-    play: bool,
+    score: Score,
+    state: State,
     timer: f32,
 }
 
 impl Model {
-    fn set_field(&mut self) {
-        self.field = (COLS, ROWS);
+    fn restart(&mut self) {
+        self.snake.set(self.field);
+        self.score.reset();
+        self.set_apple();
+        self.timer = 0.0;
+        self.state = State::Playing;
     }
-    fn set_apple(&mut self, field: (i32, i32)) {
-        let Apple(x, y) = Apple::new(field);
-        match self.snake.body.contains(&(x, y)) {
-            true => self.set_apple(self.field),
-            false => self.apple = Apple(x, y),
-        };
+    fn set_apple(&mut self) {
+        self.apple = Apple::new(&self.snake, self.field);
+    }
+    fn draw_score(&self, window: &Window) {
+        let line = format!(
+            "SCORE: {}   BEST: {}   LEVEL: {}",
+            self.score.current,
+            self.score.best,
+            self.score.level() + 1
+        );
+        let (w, h) = draw::measure(&line, false);
+        draw::set_font(Font::CourierBold, 16);
+        draw::set_draw_color(Color::Foreground);
+        draw::draw_text2(
+            &line,
+            window.w() / 2 - w / 2,
+            PAD,
+            w,
+            h + i32::from(h == 0),
+            Align::Left,
+        );
     }
 }
 
 impl Console for Model {
-    fn load(&mut self, _path: &str) {}
-    fn exit(&self, _path: &str) {}
+    fn load(&mut self, path: &str) {
+        if let Ok(data) = std::fs::read_to_string(path) {
+            self.score.best = data.trim().parse().unwrap_or_default();
+        }
+    }
+    fn exit(&self, path: &str) {
+        let _ = std::fs::write(path, self.score.best.to_string());
+    }
     fn handle(&mut self, window: &mut Window, event: Event) -> bool {
         match event {
             Event::Focus => true,
             Event::Resize => {
-                self.snake.set((window.w(), window.h()));
-                self.play = false;
+                self.field = (COLS, ROWS);
+                match self.state {
+                    State::Playing => self.state = State::Paused,
+                    State::Menu | State::GameOver => self.restart(),
+                    State::Paused => {}
+                }
                 true
             }
             Event::KeyDown => {
@@ -40,33 +78,49 @@ impl Console for Model {
                 const RIGHT: Key = Key::from_char('d');
                 const UP: Key = Key::from_char('w');
                 const DOWN: Key = Key::from_char('s');
+                const SPACE: Key = Key::from_char(' ');
                 match event_key() {
-                    Key::Escape => match self.play {
-                        true => self.play = false,
-                        false => crate::Model::connect(window),
+                    Key::Escape => match self.state {
+                        State::Playing => self.state = State::Paused,
+                        State::Paused => self.state = State::Playing,
+                        State::GameOver => self.state = State::Menu,
+                        State::Menu => crate::to_menu(window),
                     },
-                    Key::Enter => {
-                        if !self.play {
-                            self.set_field();
-                            self.snake.set(self.field);
-                            self.score = Score::default();
-                            self.set_apple(self.field);
-                            self.play = true;
+                    Key::Enter | SPACE => match self.state {
+                        State::Menu | State::GameOver => self.restart(),
+                        State::Paused => self.state = State::Playing,
+                        State::Playing => self.state = State::Paused,
+                    },
+                    Key::Up | UP => {
+                        if self.state == State::Playing {
+                            self.snake.direction(0, -1)
                         }
                     }
-                    Key::Up | UP => self.snake.direction(0, -1),
-                    Key::Down | DOWN => self.snake.direction(0, 1),
-                    Key::Left | LEFT => self.snake.direction(-1, 0),
-                    Key::Right | RIGHT => self.snake.direction(1, 0),
+                    Key::Down | DOWN => {
+                        if self.state == State::Playing {
+                            self.snake.direction(0, 1)
+                        }
+                    }
+                    Key::Left | LEFT => {
+                        if self.state == State::Playing {
+                            self.snake.direction(-1, 0)
+                        }
+                    }
+                    Key::Right | RIGHT => {
+                        if self.state == State::Playing {
+                            self.snake.direction(1, 0)
+                        }
+                    }
                     _ => return false,
                 };
+                window.redraw();
                 true
             }
             _ => false,
         }
     }
     fn update(&mut self, dt: f32) {
-        if !self.play {
+        if self.state != State::Playing {
             return;
         }
         self.timer += dt;
@@ -74,52 +128,96 @@ impl Console for Model {
             return;
         }
         self.timer = 0.0;
-        self.play = if let Some((x, y)) = self.snake.update() {
+        if let Some((x, y)) = self.snake.update(self.field) {
             let Apple(k, l) = self.apple;
             if (x, y) == (k, l) {
-                self.set_apple(self.field);
+                self.set_apple();
                 self.score.inc();
             } else {
                 self.snake.body.pop();
             }
             self.score.update();
-            true
         } else {
-            false
-        };
+            self.state = State::GameOver;
+        }
     }
     fn draw(&self, window: &mut Window) {
         // BACKGROUND
         draw::draw_rect_fill(0, 0, window.width(), window.height(), Color::Background);
-        if self.play {
-            // GRID
-            let cell = window.width() / COLS;
-            for x in 0..COLS {
-                for y in 0..ROWS {
-                    if (x + y) % 2 == 0 {
-                        draw::draw_rect_fill(x * cell, y * cell, cell, cell, Color::Background2);
+        match self.state {
+            State::Menu => {
+                window.draw_welcome(
+                    "Snake",
+                    &[
+                        &["BEST SCORE", &self.score.best.to_string()],
+                        &["PRESS ENTER", "for play"],
+                        &["PRESS ESC", "for exit"],
+                    ],
+                );
+            }
+            State::Playing | State::Paused => {
+                // GRID
+                let cell = window.width() / COLS;
+                for x in 0..COLS {
+                    for y in 0..ROWS {
+                        if (x + y) % 2 == 0 {
+                            draw::draw_rect_fill(
+                                x * cell,
+                                y * cell,
+                                cell,
+                                cell,
+                                Color::Background2,
+                            );
+                        }
                     }
                 }
+                // APPLE (diameter == full cell; +1 radius so odd cell sizes don't leave a gap)
+                let field_w = COLS * cell;
+                let ax = self.apple.0 * cell + cell / 2 + (window.width() - field_w) / 2;
+                let ay = self.apple.1 * cell + cell / 2;
+                draw::draw_circle_fill(ax, ay, cell / 2 + 1, sol::RED);
+                // highlight + leaf for readability on the light background
+                draw::draw_circle_fill(
+                    ax - cell / 6,
+                    ay - cell / 6,
+                    cell / 7,
+                    Color::from_hex(0xef6f5a),
+                );
+                draw::draw_circle_fill(ax + cell / 5, ay - cell / 2, cell / 8, sol::GREEN);
+                // SNAKE BODY (dark base02 segments -> strong contrast vs base2/base3 grid)
+                for &seg in &self.snake.body[1..] {
+                    draw::draw_rect_fill(seg.0 * cell, seg.1 * cell, cell, cell, sol::BASE02);
+                }
+                // SNAKE HEAD (bright cyan, outlined)
+                let hx = self.snake.body[0].0 * cell;
+                let hy = self.snake.body[0].1 * cell;
+                draw::draw_rect_fill(hx, hy, cell, cell, sol::CYAN);
+                draw::set_draw_color(sol::BASE03);
+                draw::draw_rect(hx + 1, hy + 1, cell - 2, cell - 2);
+                // eyes
+                draw::set_draw_color(Color::Background2);
+                draw::draw_point(hx + cell / 4, hy + cell / 3);
+                draw::draw_point(hx + cell * 3 / 4, hy + cell / 3);
+                self.draw_score(window);
+                if self.state == State::Paused {
+                    window.draw_overlay("PAUSED", "PRESS ENTER to continue", sol::VIOLET);
+                }
             }
-            // SNAKE BODY
-            for &seg in &self.snake.body {
-                draw::draw_rect_fill(seg.0 * cell, seg.1 * cell, cell, cell, Color::Cyan);
+            State::GameOver => {
+                window.draw_overlay(
+                    "GAME OVER",
+                    &format!("SCORE: {}   BEST: {}", self.score.current, self.score.best),
+                    sol::RED,
+                );
+                window.draw_text(
+                    "PRESS ENTER for retry, ESC for menu",
+                    0,
+                    window.h() / 2 + HEIGHT,
+                    Color::Foreground,
+                    Align::Center,
+                    20,
+                );
             }
-            // SNAKE HEAD
-            draw::draw_rect_fill(
-                self.snake.body[0].0 * cell,
-                self.snake.body[0].1 * cell,
-                cell,
-                cell,
-                Color::Green,
-            );
-            // APPLE
-            draw::draw_circle_fill(self.apple.0 * cell, self.apple.1 * cell, cell, Color::Red);
-        } else {
-            window.draw_welcome(
-                "Snake",
-                &[&["PRESS ENTER", "for play"], &["PRESS ESC", "for exit"]],
-            );
         }
     }
 }

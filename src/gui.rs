@@ -1,9 +1,7 @@
 pub use {
-    comfy_table::{Table, modifiers, presets},
     fltk::{
         app,
-        app::event_coords,
-        app::event_key,
+        app::{event_button, event_coords, event_key},
         draw,
         enums::{Align, Color, Cursor, Event, Font, Key},
         image::SvgImage,
@@ -24,6 +22,31 @@ pub const PAD: i32 = 10;
 pub const HEIGHT: i32 = 3 * PAD;
 pub const WIDTH: i32 = 3 * HEIGHT;
 
+/// Full Solarized palette as plain constants (Solarized Light scheme).
+/// Dark variants (base02/base03) double as high-contrast fills so every game
+/// stays readable on the light background.
+pub mod sol {
+    use fltk::enums::Color;
+
+    pub const BASE03: Color = Color::from_hex(0x002b36);
+    pub const BASE02: Color = Color::from_hex(0x073642);
+    pub const BASE01: Color = Color::from_hex(0x586e75);
+    pub const BASE00: Color = Color::from_hex(0x657b83);
+    #[allow(dead_code)] // full Solarized palette kept for future use
+    pub const BASE0: Color = Color::from_hex(0x839496);
+    pub const BASE1: Color = Color::from_hex(0x93a1a1);
+    pub const BASE2: Color = Color::from_hex(0xeee8d5);
+    pub const BASE3: Color = Color::from_hex(0xfdf6e3);
+    pub const YELLOW: Color = Color::from_hex(0xb58900);
+    pub const ORANGE: Color = Color::from_hex(0xcb4b16);
+    pub const RED: Color = Color::from_hex(0xdc322f);
+    pub const MAGENTA: Color = Color::from_hex(0xd33682);
+    pub const VIOLET: Color = Color::from_hex(0x6c71c4);
+    pub const BLUE: Color = Color::from_hex(0x268bd2);
+    pub const CYAN: Color = Color::from_hex(0x2aa198);
+    pub const GREEN: Color = Color::from_hex(0x859900);
+}
+
 #[derive(Default)]
 pub struct Settings {
     pub fullscreen: bool,
@@ -36,11 +59,11 @@ pub struct Settings {
 
 impl Settings {
     pub fn config(&self) -> Window {
-        app::set_background_color(238, 232, 213);
-        app::set_background2_color(253, 246, 227);
-        app::set_foreground_color(7, 54, 66);
-        app::set_selection_color(203, 75, 22);
-        app::set_inactive_color(181, 137, 0);
+        app::set_background_color(238, 232, 213); // base2
+        app::set_background2_color(253, 246, 227); // base3
+        app::set_foreground_color(7, 54, 66); // base02 - high contrast on light bg
+        app::set_selection_color(203, 75, 22); // orange
+        app::set_inactive_color(181, 137, 0); // yellow
         Tooltip::set_color(Color::Background2);
         Tooltip::set_text_color(Color::Foreground);
         for (color, (r, g, b)) in [
@@ -49,6 +72,7 @@ impl Settings {
             (Color::Blue, (38, 139, 210)),
             (Color::Cyan, (42, 161, 152)),
             (Color::Green, (133, 153, 0)),
+            (Color::Yellow, (181, 137, 0)),
         ] {
             app::set_color(color, r, g, b);
         }
@@ -65,6 +89,18 @@ impl Settings {
         wgt.end();
         wgt.show();
         wgt
+    }
+}
+
+/// RAII guard marking a `Console` state RefCell as currently borrowed by one
+/// of the FLTK callbacks (draw / handle / close). See `Console::connect`:
+/// it prevents re-entrant borrows when a redraw is delivered while another
+/// callback still holds the state.
+struct BorrowGuard(std::rc::Rc<std::cell::Cell<bool>>);
+
+impl Drop for BorrowGuard {
+    fn drop(&mut self) {
+        self.0.set(false);
     }
 }
 
@@ -88,11 +124,52 @@ where
             window.xclass().unwrap(),
         );
         let state = std::rc::Rc::new(std::cell::RefCell::new(Self::default()));
+        // Shared flag: once the app leaves this game (e.g. back to the menu),
+        // all callbacks installed here become stale. Handlers installed by the
+        // previous game would otherwise run during `handle_event(Resize)` below
+        // and re-enter the RefCell, causing an "already mutably borrowed"
+        // panic; the draw/timeout callbacks would fight the new model for the
+        // same window. Every callback checks the flag before touching `state`.
+        let alive = std::rc::Rc::new(std::cell::Cell::new(true));
+        // Re-entrancy guard: FLTK may fire a queued redraw *while* we are
+        // still inside a key/mouse handler (e.g. a game calls `redraw()` and
+        // then `to_menu()` in the same event). Without this guard the draw
+        // closure would try to `borrow_mut()` the state that the handler
+        // closure already borrows mutably -> "RefCell already mutably
+        // borrowed" panic. When busy, we simply skip: the periodic timeout
+        // redraws anyway, so no frame is lost.
+        let busy = std::rc::Rc::new(std::cell::Cell::new(false));
+        // Remember the live state so the app can save it when leaving the game,
+        // and disarm this game's callbacks right away.
+        crate::CURRENT.set(Some(Box::new({
+            let state = state.clone();
+            let alive = alive.clone();
+            let busy = busy.clone();
+            move |path: &str| {
+                alive.set(false);
+                // Mark the state as busy while we borrow it: FLTK may deliver a
+                // queued redraw *inside* this call (e.g. from `redraw()` issued
+                // by the game just before returning to the menu). Without the
+                // guard the draw closure would `borrow_mut()` the same RefCell
+                // -> "RefCell already mutably borrowed" panic.
+                if busy.get() {
+                    return; // an outer callback already holds the borrow
+                }
+                let _guard = BorrowGuard(busy.clone());
+                state.borrow().exit(path);
+            }
+        })));
         state.borrow_mut().load(&path);
         let mut time = Instant::now();
         window.draw({
             let state = state.clone();
+            let alive = alive.clone();
+            let busy = busy.clone();
             move |window| {
+                if !alive.get() || busy.get() {
+                    return;
+                }
+                let _guard = BorrowGuard(busy.clone());
                 state.borrow_mut().update(time.elapsed().as_secs_f32());
                 state.borrow().draw(window);
                 time = Instant::now();
@@ -100,13 +177,30 @@ where
         });
         window.handle({
             let state = state.clone();
-            move |window, event| state.borrow_mut().handle(window, event)
+            let alive = alive.clone();
+            let busy = busy.clone();
+            move |window, event| {
+                if !alive.get() || busy.get() {
+                    return false;
+                }
+                let _guard = BorrowGuard(busy.clone());
+                state.borrow_mut().handle(window, event)
+            }
         });
         window.handle_event(Event::Resize);
-        window.set_callback(move |window| {
-            if app::event() == Event::Close {
-                state.borrow().exit(&path);
-                window.hide();
+        window.set_callback({
+            let path = path.clone();
+            let state = state.clone();
+            let alive = alive.clone();
+            let busy = busy.clone();
+            move |window| {
+                if app::event() == Event::Close {
+                    if alive.get() && !busy.get() {
+                        let _guard = BorrowGuard(busy.clone());
+                        state.borrow().exit(&path);
+                    }
+                    window.hide();
+                }
             }
         });
     }
@@ -169,40 +263,61 @@ impl Painter for Window {
         draw::draw_rect_fill(0, 0, self.w(), self.h(), color);
     }
     fn draw_welcome(&self, title: &str, menu: &[&[&str]]) {
+        // Big bold title, centered (no external ASCII-art/table crates).
+        draw::set_font(Font::CourierBold, 48);
+        draw::set_draw_color(sol::BASE03);
+        let (tw, th) = draw::measure(title, false);
+        draw::draw_text2(
+            title,
+            self.w() / 2 - tw / 2,
+            self.h() / 5 - th / 2,
+            tw,
+            th,
+            Align::Center,
+        );
+        // Menu rows inside a framed panel, key column highlighted in orange.
+        let row_h = 34;
+        let pad = 24;
         draw::set_font(Font::CourierBold, 20);
-        draw::set_draw_color(Color::Green);
-        draw::draw_text2(
-            &figleter::FIGfont::standard()
-                .unwrap()
-                .convert(title)
-                .unwrap()
-                .to_string(),
-            0,
-            self.h() / 4,
-            self.w(),
-            HEIGHT,
-            Align::Center,
-        );
-        draw::set_draw_color(Color::Red);
-        draw::draw_text2(
-            &{
-                let mut table = Table::new();
-                table.load_preset(match cfg!(target_os = "windows") {
-                    true => presets::ASCII_FULL,
-                    false => presets::UTF8_FULL,
-                });
-                table.apply_modifier(modifiers::UTF8_ROUND_CORNERS);
-                for row in menu {
-                    table.add_row(*row);
-                }
-                table
+        let mut max_w = 0;
+        for row in menu {
+            let line = row.join("   ");
+            let (w, _) = draw::measure(&line, false);
+            if w > max_w {
+                max_w = w;
             }
-            .to_string(),
-            0,
-            self.h() / 3 * 2,
-            self.w(),
-            HEIGHT,
-            Align::Center,
-        );
+        }
+        let panel_w = max_w + 2 * pad;
+        let panel_h = menu.len() as i32 * row_h + 2 * pad;
+        let x0 = self.w() / 2 - panel_w / 2;
+        let y0 = self.h() / 2 - panel_h / 6;
+        draw::set_draw_color(sol::BASE2);
+        draw::draw_rounded_rectf(x0, y0, panel_w, panel_h, 10);
+        draw::set_draw_color(sol::BASE01);
+        draw::draw_rounded_rect(x0, y0, panel_w, panel_h, 10);
+        for (i, row) in menu.iter().enumerate() {
+            let y = y0 + pad + i as i32 * row_h;
+            match row {
+                [key, hint] => {
+                    draw::set_draw_color(sol::ORANGE);
+                    draw::draw_text2(key, x0 + pad, y, max_w, row_h, Align::Left);
+                    draw::set_draw_color(sol::BASE00);
+                    let (kw, _) = draw::measure(key, false);
+                    draw::draw_text2(
+                        hint,
+                        x0 + pad + kw + 24,
+                        y,
+                        max_w - kw - 24,
+                        row_h,
+                        Align::Left,
+                    );
+                }
+                [single] => {
+                    draw::set_draw_color(sol::BASE03);
+                    draw::draw_text2(single, x0 + pad, y, max_w, row_h, Align::Left);
+                }
+                _ => {}
+            }
+        }
     }
 }

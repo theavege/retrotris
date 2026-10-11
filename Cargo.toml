@@ -8,6 +8,4 @@ keywords = ["game", "graphics"]
 
 [dependencies]
 rand = "0.10"
-figleter = { version = "0.2" }
-comfy-table = "7"
 fltk = { version = "1.5" }
