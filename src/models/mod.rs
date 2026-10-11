@@ -1,5 +1,6 @@
 pub mod arkanoid;
 pub mod bird;
+pub mod invaders;
 pub mod pong;
 pub mod runner;
 pub mod snake;
