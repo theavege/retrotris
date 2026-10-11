@@ -44,22 +44,24 @@ impl Model {
     /// Gravity tick plus line clearing and drop scoring.
     fn tick(&mut self) {
         let before = self.tetris.curr.y;
-        if !self.tetris.update() {
-            self.state = State::GameOver;
-            return;
+        match self.tetris.update() {
+            None => {
+                self.state = State::GameOver;
+                return;
+            }
+            Some(cleared) => self.after_lock(cleared),
         }
         if self.tetris.curr.y > before {
             self.score.current += SOFT_DROP_PTS;
         }
-        self.after_lock();
     }
-    fn after_lock(&mut self) {
+    fn after_lock(&mut self, cleared: Vec<usize>) {
         if self.tetris.dropped {
-            self.score.current += HARD_DROP_PTS * (FIELD_ROWS as i32 - self.tetris.grid.ghost(&self.tetris.curr).y).max(0);
+            self.score.current += HARD_DROP_PTS
+                * (FIELD_ROWS as i32 - self.tetris.grid.ghost(&self.tetris.curr).y).max(0);
         }
-        let cleared = self.tetris.grid.clear_lines();
-        if cleared > 0 {
-            self.score.add_lines(cleared);
+        if !cleared.is_empty() {
+            self.score.add_lines(cleared.len());
         }
     }
     fn draw_hud(&self, window: &Window, cell: i32) {
@@ -121,8 +123,10 @@ impl Console for Model {
                     }
                     Key::Down | DOWN => {
                         if self.state == State::Playing {
-                            self.tetris.soft_drop();
-                            self.after_lock();
+                            match self.tetris.soft_drop() {
+                                None => self.state = State::GameOver,
+                                Some(cleared) => self.after_lock(cleared),
+                            }
                         }
                     }
                     Key::Left | LEFT => {
@@ -137,8 +141,10 @@ impl Console for Model {
                     }
                     Key::ShiftL | Key::ShiftR => {
                         if self.state == State::Playing {
-                            self.tetris.hard_drop();
-                            self.after_lock();
+                            match self.tetris.hard_drop() {
+                                None => self.state = State::GameOver,
+                                Some(cleared) => self.after_lock(cleared),
+                            }
                         }
                     }
                     Key::ControlL | Key::ControlR | C => {
@@ -184,7 +190,13 @@ impl Console for Model {
                 let x0 = (window.width() - field_w) / 2;
                 let y0 = (window.height() - cell * FIELD_ROWS as i32) / 2;
                 // Playfield frame + empty cells
-                draw::draw_rect_fill(x0 - 2, y0 - 2, field_w + 4, cell * FIELD_ROWS as i32 + 4, Color::Foreground);
+                draw::draw_rect_fill(
+                    x0 - 2,
+                    y0 - 2,
+                    field_w + 4,
+                    cell * FIELD_ROWS as i32 + 4,
+                    Color::Foreground,
+                );
                 for y in 0..FIELD_ROWS as i32 {
                     for x in 0..FIELD_COLS as i32 {
                         draw::draw_rect_fill(
@@ -218,8 +230,22 @@ impl Console for Model {
                         }
                     }
                 }
-                self.draw_slot("HOLD", x0 - cell * (PANEL_CELLS + 1), y0, cell, self.tetris.hold_kind, self.tetris.hold_used);
-                self.draw_slot("NEXT", x0 + field_w + cell, y0, cell, Some(self.tetris.next_kind), false);
+                self.draw_slot(
+                    "HOLD",
+                    x0 - cell * (PANEL_CELLS + 1),
+                    y0,
+                    cell,
+                    self.tetris.hold_kind,
+                    self.tetris.hold_used,
+                );
+                self.draw_slot(
+                    "NEXT",
+                    x0 + field_w + cell,
+                    y0,
+                    cell,
+                    Some(self.tetris.next_kind),
+                    false,
+                );
                 self.draw_hud(window, cell);
                 if self.state == State::Paused {
                     window.draw_overlay("PAUSED", "PRESS ENTER to continue", Color::Magenta);
@@ -249,7 +275,14 @@ impl Model {
     fn draw_slot(&self, title: &str, x: i32, y: i32, cell: i32, kind: Option<usize>, dim: bool) {
         draw::set_font(Font::CourierBold, cell);
         draw::set_draw_color(Color::Foreground);
-        draw::draw_text2(title, x, y - cell - 4, cell * PANEL_CELLS, cell, Align::Left);
+        draw::draw_text2(
+            title,
+            x,
+            y - cell - 4,
+            cell * PANEL_CELLS,
+            cell,
+            Align::Left,
+        );
         let Some(kind) = kind else { return };
         let color = if dim { Color::Inactive } else { COLORS[kind] };
         let cells = SHAPES[kind][0];
@@ -263,7 +296,13 @@ impl Model {
         let off_x = x + (cell * PANEL_CELLS - (max_x - min_x + 1) * cell) / 2 - min_x * cell;
         let off_y = y + (cell * PANEL_CELLS - (max_y - min_y + 1) * cell) / 2 - min_y * cell;
         for (cx, cy) in cells {
-            draw::draw_rect_fill(off_x + cx * cell + 1, off_y + cy * cell + 1, cell - 2, cell - 2, color);
+            draw::draw_rect_fill(
+                off_x + cx * cell + 1,
+                off_y + cy * cell + 1,
+                cell - 2,
+                cell - 2,
+                color,
+            );
         }
     }
 }

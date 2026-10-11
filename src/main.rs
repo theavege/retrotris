@@ -12,6 +12,7 @@ pub enum Game {
     Bird,
     Pong,
     Runner,
+    Arkanoid,
 }
 
 impl Game {
@@ -21,7 +22,8 @@ impl Game {
             Self::Snake => Self::Bird,
             Self::Bird => Self::Pong,
             Self::Pong => Self::Runner,
-            Self::Runner => Self::Tetris,
+            Self::Runner => Self::Arkanoid,
+            Self::Arkanoid => Self::Tetris,
         }
     }
     fn to_str(&self) -> &str {
@@ -31,6 +33,7 @@ impl Game {
             Self::Bird => "Bird",
             Self::Pong => "Pong",
             Self::Runner => "Runner",
+            Self::Arkanoid => "Arkanoid",
         }
     }
     fn to_play(&self, window: &mut Window) {
@@ -40,6 +43,7 @@ impl Game {
             Self::Bird => games::bird::Model::connect(window),
             Self::Pong => games::pong::Model::connect(window),
             Self::Runner => games::runner::Model::connect(window),
+            Self::Arkanoid => games::arkanoid::Model::connect(window),
         }
     }
 }

@@ -97,10 +97,10 @@ const KICKS_R: [[[(i32, i32); 5]; 4]; 2] = [
 const KICKS_L: [[[(i32, i32); 5]; 4]; 2] = [
     // JLSTZ
     [
-        [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],   // 0 -> L
-        [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)], // 1 -> L
+        [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],    // 0 -> L
+        [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],  // 1 -> L
         [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)], // 2 -> L
-        [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],    // 3 -> L
+        [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],     // 3 -> L
     ],
     // I
     [
@@ -165,14 +165,23 @@ impl Default for Piece {
 impl Piece {
     /// Spawns near the top of the field, horizontally centered.
     pub fn new(kind: usize) -> Self {
-        Self { kind, rot: 0, x: SPAWN_X, y: SPAWN_ROW }
+        Self {
+            kind,
+            rot: 0,
+            x: SPAWN_X,
+            y: SPAWN_ROW,
+        }
     }
     /// Absolute grid cells occupied by this piece.
     pub fn cells(&self) -> [Cell; 4] {
         SHAPES[self.kind][self.rot].map(|(i, j)| (self.x + i, self.y + j))
     }
     pub fn moved(&self, dx: i32, dy: i32) -> Self {
-        Self { x: self.x + dx, y: self.y + dy, ..*self }
+        Self {
+            x: self.x + dx,
+            y: self.y + dy,
+            ..*self
+        }
     }
     /// Rotation candidates (current first, then SRS kicks) for turning
     /// clockwise (`cw = true`) or counter-clockwise from the current state.
@@ -180,11 +189,19 @@ impl Piece {
         if self.kind == 0 {
             return vec![*self]; // O-piece has no meaningful rotation
         }
-        let table = if cw { KICKS_R } else { KICKS_L }[if self.kind == 1 { 1 } else { 0 }][self.rot];
-        let next = if cw { (self.rot + 1) % ROTATIONS } else { (self.rot + ROTATIONS - 1) % ROTATIONS };
+        let table =
+            if cw { KICKS_R } else { KICKS_L }[if self.kind == 1 { 1 } else { 0 }][self.rot];
+        let next = if cw {
+            (self.rot + 1) % ROTATIONS
+        } else {
+            (self.rot + ROTATIONS - 1) % ROTATIONS
+        };
         table
             .iter()
-            .map(|&(dx, dy)| Self { rot: next, ..self.moved(dx, -dy) })
+            .map(|&(dx, dy)| Self {
+                rot: next,
+                ..self.moved(dx, -dy)
+            })
             .collect()
     }
 }
@@ -196,7 +213,9 @@ pub struct Bag {
 
 impl Default for Bag {
     fn default() -> Self {
-        Self { queue: Vec::with_capacity(PIECE_COUNT) }
+        Self {
+            queue: Vec::with_capacity(PIECE_COUNT),
+        }
     }
 }
 
@@ -225,6 +244,15 @@ impl Default for Grid {
 }
 
 impl Grid {
+    /// Test-only grid pre-filled with `kind` in rows [from..FIELD_ROWS).
+    #[cfg(test)]
+    fn filled(from: usize, kind: usize) -> Self {
+        let mut rows = vec![[None; FIELD_COLS]; FIELD_ROWS];
+        for row in rows.iter_mut().skip(from) {
+            *row = [Some(kind); FIELD_COLS];
+        }
+        Self(rows)
+    }
     /// True when every cell of the piece lies inside the walls/floor and does
     /// not overlap locked cells.
     pub fn fits(&self, piece: &Piece) -> bool {
@@ -245,22 +273,24 @@ impl Grid {
         }
     }
     /// Remove full rows, shifting the remaining stack towards the bottom,
-    /// and return the number of cleared lines.
-    pub fn clear_lines(&mut self) -> usize {
-        let kept: Vec<[Option<usize>; FIELD_COLS]> =
-            self.0.iter().filter(|row| !row.contains(&None)).cloned().collect();
-        if kept.is_empty() {
-            return 0;
-        }
-        let mut rows: Vec<[Option<usize>; FIELD_COLS]> = self
+    /// and return the indices of the cleared rows in the pre-clear grid.
+    pub fn clear_lines(&mut self) -> Vec<usize> {
+        // Retain keeps non-full rows in order and drops the full ones;
+        // padding with empty rows on top restores the field height, so the
+        // whole stack shifts down by exactly the number of cleared rows.
+        let cleared: Vec<usize> = self
             .0
             .iter()
-            .filter(|row| row.contains(&None))
-            .cloned()
+            .enumerate()
+            .filter(|(_, row)| !row.contains(&None))
+            .map(|(i, _)| i)
             .collect();
-        rows.extend(std::iter::repeat_n([None; FIELD_COLS], kept.len()));
-        self.0 = rows;
-        kept.len()
+        if !cleared.is_empty() {
+            self.0.retain(|row| row.contains(&None));
+            self.0
+                .splice(0..0, std::iter::repeat_n([None; FIELD_COLS], cleared.len()));
+        }
+        cleared
     }
     /// Render snapshot: locked cells overlaid by the active piece.
     pub fn draw(&self, curr: &Piece) -> Vec<[Option<usize>; FIELD_COLS]> {
@@ -297,6 +327,28 @@ pub struct Tetris {
     buffered_right: bool,
     lock_timer: u8,
     pub dropped: bool,
+}
+
+impl Tetris {
+    /// Test-only: start on top of a prefilled stack.
+    #[cfg(test)]
+    fn with_grid(grid: Grid) -> Self {
+        let mut tetris = Self {
+            bag: Bag::default(),
+            grid,
+            curr: Piece::new(0),
+            next_kind: 0,
+            hold_kind: None,
+            hold_used: false,
+            buffered_rot: None,
+            buffered_left: false,
+            buffered_right: false,
+            lock_timer: 0,
+            dropped: false,
+        };
+        tetris.spawn();
+        tetris
+    }
 }
 
 impl Default for Tetris {
@@ -357,46 +409,56 @@ impl Tetris {
             }
         }
     }
-    pub fn soft_drop(&mut self) {
-        self.step(true);
+    /// Manual gravity step (key repeat); reports clears like `update`.
+    pub fn soft_drop(&mut self) -> Option<Vec<usize>> {
+        self.step(true)
     }
     /// Slam the piece down to its ghost position and lock immediately.
-    pub fn hard_drop(&mut self) {
+    /// Reports the cleared rows; `None` means the follow-up spawn topped out.
+    pub fn hard_drop(&mut self) -> Option<Vec<usize>> {
         let ghost = self.grid.ghost(&self.curr);
         self.dropped = true;
         self.curr = ghost;
-        self.finish();
+        self.finish()
     }
     /// One gravity tick: apply buffered inputs, then try to fall one row.
-    /// Returns false when the game is over (a new piece spawns into the stack).
-    pub fn update(&mut self) -> bool {
+    /// On lock, reports the cleared rows; `None` means the game is over.
+    pub fn update(&mut self) -> Option<Vec<usize>> {
         self.step(false)
     }
-    fn step(&mut self, soft: bool) -> bool {
+    fn step(&mut self, soft: bool) -> Option<Vec<usize>> {
         self.apply_input();
         if self.grid.fits(&self.curr.moved(0, 1)) {
             self.curr = self.curr.moved(0, 1);
             if soft {
                 self.lock_timer = 0; // moving resets the lock grace
             }
-            true
+            Some(Vec::new())
         } else if self.lock_timer < LOCK_DELAY {
             self.lock_timer += 1; // grace period: allow last-moment slides
-            true
+            Some(Vec::new())
         } else {
             self.finish()
         }
     }
     fn apply_input(&mut self) {
         if let Some(cw) = self.buffered_rot.take() {
-            if let Some(rotated) = self.curr.rotations(cw).into_iter().find(|p| self.grid.fits(p)) {
+            if let Some(rotated) = self
+                .curr
+                .rotations(cw)
+                .into_iter()
+                .find(|p| self.grid.fits(p))
+            {
                 self.curr = rotated;
                 self.lock_timer = 0;
             }
         }
-        for dir in [self.buffered_left.then_some(-1), self.buffered_right.then_some(1)]
-            .into_iter()
-            .flatten()
+        for dir in [
+            self.buffered_left.then_some(-1),
+            self.buffered_right.then_some(1),
+        ]
+        .into_iter()
+        .flatten()
         {
             self.buffered_left = false;
             self.buffered_right = false;
@@ -407,14 +469,17 @@ impl Tetris {
             }
         }
     }
-    /// Lock the piece, clear lines, spawn the next one. False on game over.
-    fn finish(&mut self) -> bool {
+    /// Lock the piece, clear full lines and spawn the next one.
+    /// Returns the cleared row indices (empty when nothing was completed) or
+    /// `None` when the fresh spawn collides with the stack (game over).
+    fn finish(&mut self) -> Option<Vec<usize>> {
         self.grid.lock(&self.curr);
+        let cleared = self.grid.clear_lines();
         self.spawn();
         if !self.grid.fits(&self.curr) {
-            return false;
+            return None;
         }
-        true
+        Some(cleared)
     }
     pub fn ghost(&self) -> Piece {
         self.grid.ghost(&self.curr)
@@ -450,48 +515,56 @@ mod tests {
         let grid = Grid::default();
         let piece = Piece::new(1); // I horizontal
         let ghost = grid.ghost(&piece);
-        assert_eq!(ghost.cells().iter().map(|c| c.1).max(), Some(FIELD_ROWS as i32 - 1));
+        assert_eq!(
+            ghost.cells().iter().map(|c| c.1).max(),
+            Some(FIELD_ROWS as i32 - 1)
+        );
     }
 
     #[test]
     fn line_clear_shifts_stack() {
+        // Bottom row is full except column 8; a vertical I occupies column 8
+        // in rows 16..=19, so together they complete the last row.
         let mut grid = Grid::default();
-        // Vertical I at column 8 occupies rows 16..=19.
-        grid.lock(&Piece { kind: 1, rot: 1, x: 6, y: FIELD_ROWS as i32 - 4 });
-        assert_eq!(grid.clear_lines(), 0);
-        // Fill row 19 completely except column 8 (already taken by the I).
-        for x in 0..FIELD_COLS as i32 {
+        for x in 0..FIELD_COLS {
             if x != 8 {
-                grid.lock(&Piece { kind: 5, rot: 0, x, y: FIELD_ROWS as i32 - 1 });
+                grid.0[FIELD_ROWS - 1][x] = Some(5);
             }
         }
-        assert_eq!(grid.clear_lines(), 1);
-        // The bottom row is gone; everything above it shifted down one cell:
-        // the I now ends at row 18 and its former bottom cell moved there too.
-        assert_eq!(grid.0[FIELD_ROWS - 2][8], Some(1));
-        assert_eq!(grid.0[FIELD_ROWS - 1][8], None);
-        assert!(grid.0[FIELD_ROWS - 1].iter().all(|c| c.is_none()));
+        let mut tetris = Tetris::with_grid(grid);
+        tetris.curr = Piece {
+            kind: 1,
+            rot: 1,
+            x: 6,
+            y: FIELD_ROWS as i32 - 4,
+        };
+        // finish() locks the active piece and clears full lines in one pass.
+        assert_eq!(tetris.finish(), Some(vec![FIELD_ROWS - 1]));
+        // The cleared row is gone; everything above it shifted down one cell:
+        // the I's former bottom cell (row 19) moved to the new floor (row 19),
+        // because the stack above the gap slides into it...
+        assert_eq!(tetris.grid.0[FIELD_ROWS - 1][8], Some(1));
+        // ...and the rows that were empty are still empty after the shift.
+        assert_eq!(tetris.grid.0[FIELD_ROWS - 2][7], None);
+        // No full rows remain anywhere on the field.
+        assert!(tetris.grid.0.iter().all(|row| row.contains(&None)));
     }
 
     #[test]
     fn game_over_when_spawn_blocked() {
-        let mut tetris = Tetris::default();
-        // Fill the top rows so a new piece cannot spawn.
-        for y in 0..3 {
-            for x in 0..FIELD_COLS {
-                tetris.grid.0[y][x] = Some(0);
-            }
-        }
-        tetris.hard_drop();
-        // After locking, spawning into the wall must end the game eventually.
+        // Stack reaches just below the spawn zone and contains no clearable
+        // row; the next piece spawning at SPAWN_ROW collides immediately.
+        let mut tetris = Tetris::with_grid(Grid::filled(SPAWN_ROW as usize + 2, 0));
+        // Whatever piece is active, slamming it down and locking the next
+        // ones must eventually spawn into the wall and report game over.
         let mut alive = true;
-        for _ in 0..LOCK_DELAY + 5 {
-            alive = tetris.update();
+        for _ in 0..16 {
+            alive = tetris.hard_drop().is_some();
             if !alive {
                 break;
             }
         }
-        assert!(!alive);
+        assert!(!alive, "topping out must end the game");
     }
 
     #[test]

@@ -1,3 +1,4 @@
+pub mod arkanoid;
 pub mod bird;
 pub mod pong;
 pub mod runner;

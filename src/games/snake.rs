@@ -167,7 +167,13 @@ impl Console for Model {
                 for x in 0..COLS {
                     for y in 0..ROWS {
                         if (x + y) % 2 == 0 {
-                            draw::draw_rect_fill(x * cell, y * cell, cell, cell, Color::Background2);
+                            draw::draw_rect_fill(
+                                x * cell,
+                                y * cell,
+                                cell,
+                                cell,
+                                Color::Background2,
+                            );
                         }
                     }
                 }

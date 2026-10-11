@@ -192,7 +192,13 @@ impl Console for Model {
                 let dash = HEIGHT;
                 let mut y = 0;
                 while y < window.h() {
-                    draw::draw_rect_fill(window.w() / 2 - WIDTH / 6, y, WIDTH / 3, dash, Color::Inactive);
+                    draw::draw_rect_fill(
+                        window.w() / 2 - WIDTH / 6,
+                        y,
+                        WIDTH / 3,
+                        dash,
+                        Color::Inactive,
+                    );
                     y += dash * 2;
                 }
                 let player = self.player.draw();
@@ -216,7 +222,10 @@ impl Console for Model {
                 window.draw_welcome(
                     if won { "You win!" } else { "Game Over" },
                     &[
-                        &["FINAL SCORE", &format!("{} : {}", self.score.left, self.score.right)],
+                        &[
+                            "FINAL SCORE",
+                            &format!("{} : {}", self.score.left, self.score.right),
+                        ],
                         &["PRESS ENTER", "to retry"],
                         &["PRESS ESC", "for menu"],
                     ],
