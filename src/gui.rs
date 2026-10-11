@@ -304,7 +304,7 @@ impl Painter for Window {
                     draw::set_draw_color(sol::BASE00);
                     let (kw, _) = draw::measure(key, false);
                     draw::draw_text2(
-                        *hint,
+                        hint,
                         x0 + pad + kw + 24,
                         y,
                         max_w - kw - 24,
