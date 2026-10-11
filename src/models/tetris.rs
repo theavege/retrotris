@@ -466,9 +466,11 @@ mod tests {
             }
         }
         assert_eq!(grid.clear_lines(), 1);
-        // The bottom row is gone; the I column shifted down one cell.
-        assert_eq!(grid.0[FIELD_ROWS - 1][8], Some(1));
-        assert!(grid.0[FIELD_ROWS - 1][..8].iter().all(|c| c.is_none()));
+        // The bottom row is gone; everything above it shifted down one cell:
+        // the I now ends at row 18 and its former bottom cell moved there too.
+        assert_eq!(grid.0[FIELD_ROWS - 2][8], Some(1));
+        assert_eq!(grid.0[FIELD_ROWS - 1][8], None);
+        assert!(grid.0[FIELD_ROWS - 1].iter().all(|c| c.is_none()));
     }
 
     #[test]
