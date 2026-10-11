@@ -196,7 +196,7 @@ impl Console for Model {
             ),
             State::Serving | State::Playing | State::Paused => {
                 self.draw_score(window);
-                // Bricks: tough cells use the selection color, fresh ones cyan.
+                // Bricks: 3-hit = red, 2-hit = orange, fresh = cyan; dark outline.
                 for row in 0..Wall::ROWS {
                     for col in 0..Wall::COLS {
                         let health = self.wall.cell(col, row);
@@ -205,10 +205,12 @@ impl Console for Model {
                         }
                         let (x, y, w, h) = self.wall.rect(col, row, self.field);
                         let color = match health {
-                            2 => Color::Selection,
-                            _ => Color::Cyan,
+                            2 => sol::ORANGE,
+                            _ => sol::CYAN,
                         };
                         draw::draw_rect_fill(x as i32, y as i32, w as i32, h as i32, color);
+                        draw::set_draw_color(sol::BASE02);
+                        draw::draw_rect(x as i32, y as i32, w as i32, h as i32);
                     }
                 }
                 let paddle = self.paddle.draw();
@@ -217,21 +219,28 @@ impl Console for Model {
                     paddle.1 as i32,
                     paddle.2 as i32,
                     paddle.3 as i32,
-                    Color::Foreground,
+                    sol::VIOLET,
+                );
+                draw::set_draw_color(sol::BASE03);
+                draw::draw_rect(
+                    paddle.0 as i32,
+                    paddle.1 as i32,
+                    paddle.2 as i32,
+                    paddle.3 as i32,
                 );
                 let ball = self.ball.draw();
                 draw::draw_circle_fill(
                     ball.0 as i32,
                     ball.1 as i32,
                     ball.2 as i32,
-                    Color::Inactive,
+                    sol::BASE03,
                 );
                 match self.state {
                     State::Paused => {
-                        window.draw_overlay("PAUSED", "PRESS ENTER to resume", Color::Background2)
+                        window.draw_overlay("PAUSED", "PRESS ENTER to resume", sol::VIOLET)
                     }
                     State::Serving => {
-                        window.draw_overlay("READY?", "PRESS SPACE to launch", Color::Background2);
+                        window.draw_overlay("READY?", "PRESS SPACE to launch", sol::BLUE);
                     }
                     _ => {}
                 }

@@ -3,13 +3,13 @@ use crate::models::tetris::*;
 
 /// Solarized-flavoured tetromino palette, indexed by piece kind (O I S Z T J L).
 const COLORS: [Color; PIECE_COUNT] = [
-    Color::from_hex(0xB58900), // yellow  - O
-    Color::Cyan,               // cyan    - I
-    Color::Green,              // green   - S
-    Color::from_hex(0xCB4B16), // orange  - Z
-    Color::from_hex(0x6C71C4), // violet  - T
-    Color::Blue,               // blue    - J
-    Color::Magenta,            // magenta - L
+    sol::YELLOW,  // yellow  - O
+    sol::BLUE,    // blue    - I
+    sol::GREEN,   // green   - S
+    sol::ORANGE,  // orange  - Z
+    sol::VIOLET,  // violet  - T
+    sol::CYAN,    // cyan    - J
+    sol::MAGENTA, // magenta - L
 ];
 /// Soft-drop points per cell, hard-drop points per cell.
 const SOFT_DROP_PTS: i32 = 1;
@@ -248,14 +248,14 @@ impl Console for Model {
                 );
                 self.draw_hud(window, cell);
                 if self.state == State::Paused {
-                    window.draw_overlay("PAUSED", "PRESS ENTER to continue", Color::Magenta);
+                    window.draw_overlay("PAUSED", "PRESS ENTER to continue", sol::VIOLET);
                 }
             }
             State::GameOver => {
                 window.draw_overlay(
                     "GAME OVER",
                     &format!("SCORE: {}   BEST: {}", self.score.current, self.score.best),
-                    Color::Red,
+                    sol::RED,
                 );
                 window.draw_text(
                     "PRESS ENTER for retry, ESC for menu",
@@ -284,7 +284,7 @@ impl Model {
             Align::Left,
         );
         let Some(kind) = kind else { return };
-        let color = if dim { Color::Inactive } else { COLORS[kind] };
+        let color = if dim { sol::BASE1 } else { COLORS[kind] };
         let cells = SHAPES[kind][0];
         let (mut min_x, mut max_x, mut min_y, mut max_y) = (i32::MAX, 0, i32::MAX, 0);
         for &(cx, cy) in &cells {

@@ -175,31 +175,39 @@ impl Console for Model {
                 let field_w = COLS * cell;
                 let ax = self.apple.0 * cell + cell / 2 + (window.width() - field_w) / 2;
                 let ay = self.apple.1 * cell + cell / 2;
-                draw::draw_circle_fill(ax, ay, cell / 2 + 1, Color::Red);
-                // leaf
-                draw::draw_circle_fill(ax + cell / 5, ay - cell / 2, cell / 8, Color::Green);
-                // SNAKE BODY
-                for &seg in &self.snake.body[1..] {
-                    draw::draw_rect_fill(seg.0 * cell, seg.1 * cell, cell, cell, Color::Cyan);
-                }
-                // SNAKE HEAD
-                draw::draw_rect_fill(
-                    self.snake.body[0].0 * cell,
-                    self.snake.body[0].1 * cell,
-                    cell,
-                    cell,
-                    Color::Green,
+                draw::draw_circle_fill(ax, ay, cell / 2 + 1, sol::RED);
+                // highlight + leaf for readability on the light background
+                draw::draw_circle_fill(
+                    ax - cell / 6,
+                    ay - cell / 6,
+                    cell / 7,
+                    Color::from_hex(0xef6f5a),
                 );
+                draw::draw_circle_fill(ax + cell / 5, ay - cell / 2, cell / 8, sol::GREEN);
+                // SNAKE BODY (dark base02 segments -> strong contrast vs base2/base3 grid)
+                for &seg in &self.snake.body[1..] {
+                    draw::draw_rect_fill(seg.0 * cell, seg.1 * cell, cell, cell, sol::BASE02);
+                }
+                // SNAKE HEAD (bright cyan, outlined)
+                let hx = self.snake.body[0].0 * cell;
+                let hy = self.snake.body[0].1 * cell;
+                draw::draw_rect_fill(hx, hy, cell, cell, sol::CYAN);
+                draw::set_draw_color(sol::BASE03);
+                draw::draw_rect(hx + 1, hy + 1, cell - 2, cell - 2);
+                // eyes
+                draw::set_draw_color(Color::Background2);
+                draw::draw_point(hx + cell / 4, hy + cell / 3);
+                draw::draw_point(hx + cell * 3 / 4, hy + cell / 3);
                 self.draw_score(window);
                 if self.state == State::Paused {
-                    window.draw_overlay("PAUSED", "PRESS ENTER to continue", Color::Magenta);
+                    window.draw_overlay("PAUSED", "PRESS ENTER to continue", sol::VIOLET);
                 }
             }
             State::GameOver => {
                 window.draw_overlay(
                     "GAME OVER",
                     &format!("SCORE: {}   BEST: {}", self.score.current, self.score.best),
-                    Color::Red,
+                    sol::RED,
                 );
                 window.draw_text(
                     "PRESS ENTER for retry, ESC for menu",

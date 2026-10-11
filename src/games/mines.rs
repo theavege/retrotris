@@ -17,21 +17,16 @@ const GRID_ROWS: usize = 8;
 const MINES: usize = 18;
 const CELL: i32 = 40;
 
-/// Extra Solarized palette entries (FLTK has no named constants for these).
-const BASE2: Color = Color::from_rgb(238, 232, 213); // base2 / background
-const BASE3: Color = Color::from_rgb(253, 246, 227); // base3 / background2
-const ORANGE: Color = Color::from_rgb(203, 75, 22);
-
 /// Solarized number colors for the classic 1..8 mine counts.
 const NUMBERS: [Color; 8] = [
-    Color::from_rgb(38, 139, 210),  // blue
-    Color::from_rgb(42, 161, 152),  // cyan
-    Color::from_rgb(133, 153, 0),   // green
-    Color::from_rgb(203, 75, 22),   // orange
-    Color::from_rgb(211, 54, 130),  // magenta
-    Color::from_rgb(181, 137, 0),   // yellow
-    Color::from_rgb(147, 153, 153), // base1
-    Color::from_rgb(101, 123, 131), // base01
+    sol::BLUE,
+    sol::CYAN,
+    sol::GREEN,
+    sol::ORANGE,
+    sol::MAGENTA,
+    sol::YELLOW,
+    sol::BASE00,
+    sol::BASE01,
 ];
 
 #[derive(Default)]
@@ -207,12 +202,14 @@ impl Console for Model {
                     let (x, y, w, h) = self.rect(r, c);
                     let cell = self.board.cell(r, c);
                     if cell.open {
-                        // Opened: flat background2 tile with its count or mine.
-                        draw::set_draw_color(Color::Background2);
-                        draw::draw_rect_fill(x, y, w, h, Color::Background2);
+                        // Opened: recessed dark tile with its count or mine.
+                        draw::draw_rect_fill(x, y, w, h, sol::BASE02);
                         if cell.mine {
-                            draw::set_draw_color(Color::Red);
-                            draw::draw_circle_fill(x + w / 4, y + h / 4, w / 2, Color::Red);
+                            draw::set_draw_color(sol::RED);
+                            draw::draw_circle_fill(x + w / 4, y + h / 4, w / 2, sol::RED);
+                            draw::set_draw_color(sol::BASE3);
+                            draw::draw_line(x + w / 4, y + h / 4, x + 3 * w / 4, y + 3 * h / 4);
+                            draw::draw_line(x + 3 * w / 4, y + h / 4, x + w / 4, y + 3 * h / 4);
                         } else if cell.adj > 0 {
                             let n = cell.adj as usize;
                             draw::set_font(Font::HelveticaBold, CELL * 3 / 4);
@@ -228,22 +225,23 @@ impl Console for Model {
                             );
                         }
                     } else {
-                        // Closed: raised base2 tile, flags drawn on top.
-                        draw::set_draw_color(BASE2);
-                        draw::draw_rect_fill(x, y, w, h, BASE2);
-                        draw::set_draw_color(BASE3);
-                        draw::set_draw_color(BASE3);
-                        draw::draw_line(x, y + h, x + w, y + h);
-                        draw::set_draw_color(BASE3);
-                        draw::draw_line(x + w, y, x + w, y + h);
+                        // Closed: raised base3 tile with bevel, flags drawn on top.
+                        draw::draw_rect_fill(x, y, w, h, sol::BASE3);
+                        draw::set_draw_color(sol::BASE1);
+                        draw::draw_rect(x, y, w, h);
+                        draw::set_draw_color(sol::BASE2);
+                        draw::draw_line(x, y + h - 1, x + w, y + h - 1);
+                        draw::draw_line(x + w - 1, y, x + w - 1, y + h);
                         if cell.flag {
-                            draw::set_draw_color(ORANGE);
-                            draw::draw_rect_fill(x + w / 3, y + h / 4, w / 3, h / 2, ORANGE);
+                            draw::set_draw_color(sol::RED);
+                            draw::draw_rect_fill(x + w / 3, y + h / 4, w / 3, h / 2, sol::RED);
+                            draw::set_draw_color(sol::BASE02);
+                            draw::draw_line(x + w / 2, y + h / 4, x + w / 2, y + 3 * h / 4);
                         }
                     }
                 }
                 if self.scene == Scene::Paused {
-                    window.draw_overlay("PAUSED", "PRESS ENTER to resume", Color::Background2);
+                    window.draw_overlay("PAUSED", "PRESS ENTER to resume", sol::VIOLET);
                 }
             }
             Scene::GameOver => {

@@ -80,27 +80,39 @@ impl Model {
                 (y + dx * sin + dy * cos) as i32,
             )
         };
-        // body
-        draw::draw_circle_fill(x as i32, y as i32, (2.0 * r) as i32, Color::Selection);
+        // body (bright yellow circle with a dark outline -> pops on base2 bg)
+        draw::draw_circle_fill(x as i32, y as i32, (2.0 * r) as i32, sol::YELLOW);
+        draw::set_draw_color(sol::BASE02);
+        draw::draw_circle(x as i32, y as i32, (2.0 * r) as i32);
         // wing (rotates with the body)
         let (wx, wy) = px(-r * 0.35, 0.0);
-        draw::draw_circle_fill(wx, wy, (0.9 * r) as i32, Color::Inactive);
+        draw::draw_circle_fill(wx, wy, (0.9 * r) as i32, sol::ORANGE);
         // eye
         let (ex, ey) = px(r * 0.4, -r * 0.35);
         draw::draw_circle_fill(ex, ey, (0.36 * r) as i32, Color::Background);
+        draw::set_draw_color(sol::BASE03);
+        draw::draw_circle(ex, ey, (0.36 * r) as i32);
+        // pupil
+        draw::draw_circle_fill(ex + 1, ey, (0.14 * r).max(1.0) as i32, sol::BASE03);
         // beak
         let (bx, by) = px(r * 0.9, r * 0.1);
-        draw::draw_circle_fill(bx, by, (0.5 * r) as i32, Color::Yellow);
+        draw::draw_circle_fill(bx, by, (0.5 * r) as i32, sol::RED);
     }
     fn draw_pipes(&self) {
         let h = self.field.1 as f32;
         for pipe in &self.pipes {
             let (tx, ty, tw, th) = pipe.top_rect();
             let (bx, by, bw, bh) = pipe.bottom_rect(h);
-            // shafts
-            draw::draw_rect_fill(tx as i32, ty as i32, tw as i32, th as i32, Color::Green);
-            draw::draw_rect_fill(bx as i32, by as i32, bw as i32, bh as i32, Color::Green);
-            // caps (distinct lip at each gap edge)
+            // shafts (dark green fill + darker edge lines for contrast)
+            for (px_, py_, pw_, ph_) in [
+                (tx as i32, ty as i32, tw as i32, th as i32),
+                (bx as i32, by as i32, bw as i32, bh as i32),
+            ] {
+                draw::draw_rect_fill(px_, py_, pw_, ph_, sol::GREEN);
+                draw::set_draw_color(sol::BASE02);
+                draw::draw_rect(px_, py_, pw_, ph_);
+            }
+            // caps (distinct lip at each gap edge, violet for max contrast)
             let cap_h = (tw * 0.3).max(6.0) as i32;
             let over = (tw * 0.1) as i32;
             if th > 0.0 {
@@ -109,7 +121,7 @@ impl Model {
                     (ty + th) as i32 - cap_h,
                     tw as i32 + 2 * over,
                     cap_h,
-                    Color::Cyan,
+                    sol::VIOLET,
                 );
             }
             if bh > 0.0 {
@@ -118,7 +130,7 @@ impl Model {
                     by as i32,
                     bw as i32 + 2 * over,
                     cap_h,
-                    Color::Cyan,
+                    sol::VIOLET,
                 );
             }
         }
@@ -252,7 +264,7 @@ impl Console for Model {
                 self.draw_bird();
                 self.draw_score(window);
                 if self.state == State::Paused {
-                    window.draw_overlay("PAUSED", "PRESS ENTER to continue", Color::Magenta);
+                    window.draw_overlay("PAUSED", "PRESS ENTER to continue", sol::VIOLET);
                 }
             }
             State::GameOver => {
@@ -262,7 +274,7 @@ impl Console for Model {
                 window.draw_overlay(
                     "GAME OVER",
                     &format!("SCORE: {}   BEST: {}", self.score, self.best),
-                    Color::Red,
+                    sol::RED,
                 );
                 window.draw_text(
                     "PRESS ENTER for retry, ESC for menu",

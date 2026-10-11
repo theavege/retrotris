@@ -23,6 +23,30 @@ pub const PAD: i32 = 10;
 pub const HEIGHT: i32 = 3 * PAD;
 pub const WIDTH: i32 = 3 * HEIGHT;
 
+/// Full Solarized palette as plain constants (Solarized Light scheme).
+/// Dark variants (base02/base03) double as high-contrast fills so every game
+/// stays readable on the light background.
+pub mod sol {
+    use fltk::enums::Color;
+
+    pub const BASE03: Color = Color::from_hex(0x002b36);
+    pub const BASE02: Color = Color::from_hex(0x073642);
+    pub const BASE01: Color = Color::from_hex(0x586e75);
+    pub const BASE00: Color = Color::from_hex(0x657b83);
+    pub const BASE0: Color = Color::from_hex(0x839496);
+    pub const BASE1: Color = Color::from_hex(0x93a1a1);
+    pub const BASE2: Color = Color::from_hex(0xeee8d5);
+    pub const BASE3: Color = Color::from_hex(0xfdf6e3);
+    pub const YELLOW: Color = Color::from_hex(0xb58900);
+    pub const ORANGE: Color = Color::from_hex(0xcb4b16);
+    pub const RED: Color = Color::from_hex(0xdc322f);
+    pub const MAGENTA: Color = Color::from_hex(0xd33682);
+    pub const VIOLET: Color = Color::from_hex(0x6c71c4);
+    pub const BLUE: Color = Color::from_hex(0x268bd2);
+    pub const CYAN: Color = Color::from_hex(0x2aa198);
+    pub const GREEN: Color = Color::from_hex(0x859900);
+}
+
 #[derive(Default)]
 pub struct Settings {
     pub fullscreen: bool,
@@ -35,11 +59,11 @@ pub struct Settings {
 
 impl Settings {
     pub fn config(&self) -> Window {
-        app::set_background_color(238, 232, 213);
-        app::set_background2_color(253, 246, 227);
-        app::set_foreground_color(7, 54, 66);
-        app::set_selection_color(203, 75, 22);
-        app::set_inactive_color(181, 137, 0);
+        app::set_background_color(238, 232, 213); // base2
+        app::set_background2_color(253, 246, 227); // base3
+        app::set_foreground_color(7, 54, 66); // base02 - high contrast on light bg
+        app::set_selection_color(203, 75, 22); // orange
+        app::set_inactive_color(181, 137, 0); // yellow
         Tooltip::set_color(Color::Background2);
         Tooltip::set_text_color(Color::Foreground);
         for (color, (r, g, b)) in [
@@ -48,6 +72,7 @@ impl Settings {
             (Color::Blue, (38, 139, 210)),
             (Color::Cyan, (42, 161, 152)),
             (Color::Green, (133, 153, 0)),
+            (Color::Yellow, (181, 137, 0)),
         ] {
             app::set_color(color, r, g, b);
         }

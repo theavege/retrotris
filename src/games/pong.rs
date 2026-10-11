@@ -212,7 +212,6 @@ impl Console for Model {
             State::Serving | State::Playing | State::Paused => {
                 self.draw_score(window);
                 // Center dashed net.
-                draw::set_draw_color(Color::Inactive);
                 let dash = HEIGHT;
                 let mut y = 0;
                 while y < window.h() {
@@ -221,22 +220,29 @@ impl Console for Model {
                         y,
                         WIDTH / 3,
                         dash,
-                        Color::Inactive,
+                        sol::BASE1,
                     );
                     y += dash * 2;
                 }
                 let player = self.player.draw();
                 let cpu = self.cpu.draw();
                 let ball = self.ball.draw();
-                draw::draw_rect_fill(player.0, player.1, player.2, player.3, Color::Selection);
-                draw::draw_rect_fill(cpu.0, cpu.1, cpu.2, cpu.3, Color::Inactive);
-                draw::draw_circle_fill(ball.0, ball.1, ball.2, Color::Foreground);
+                // Player paddle: orange with dark outline; CPU: violet; ball: base03.
+                for (rect, fill) in [
+                    (player, sol::ORANGE),
+                    (cpu, sol::VIOLET),
+                ] {
+                    draw::draw_rect_fill(rect.0, rect.1, rect.2, rect.3, fill);
+                    draw::set_draw_color(sol::BASE03);
+                    draw::draw_rect(rect.0, rect.1, rect.2, rect.3);
+                }
+                draw::draw_circle_fill(ball.0, ball.1, ball.2, sol::BASE03);
                 match self.state {
                     State::Paused => {
-                        window.draw_overlay("PAUSED", "PRESS ENTER to resume", Color::Background2)
+                        window.draw_overlay("PAUSED", "PRESS ENTER to resume", sol::VIOLET)
                     }
                     State::Serving => {
-                        window.draw_overlay("READY?", "", Color::Background2);
+                        window.draw_overlay("READY?", "", sol::BLUE);
                     }
                     _ => {}
                 }

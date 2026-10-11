@@ -160,7 +160,7 @@ impl Console for Model {
             Scene::Playing | Scene::Paused => {
                 self.draw_game(window);
                 if let Scene::Paused = self.scene {
-                    window.draw_overlay("PAUSED", "PRESS ENTER to resume", Color::Magenta);
+                    window.draw_overlay("PAUSED", "PRESS ENTER to resume", sol::VIOLET);
                 }
             }
             Scene::GameOver => {
@@ -168,7 +168,7 @@ impl Console for Model {
                 window.draw_overlay(
                     "GAME OVER",
                     &format!("SCORE: {}   BEST: {}", self.score.current, self.score.best),
-                    Color::Red,
+                    sol::RED,
                 );
                 window.draw_text(
                     "PRESS ENTER for retry, ESC for menu",
@@ -207,12 +207,12 @@ impl Model {
             self.ground_y() as i32,
             window.w() - PADDING as i32 * 2,
             4,
-            Color::Foreground,
+            sol::BASE02,
         );
-        draw::set_draw_color(Color::Inactive);
+        draw::set_draw_color(sol::BASE1);
         let mut x = PADDING as i32 - self.ground_scroll as i32;
         while x < window.w() - PADDING as i32 {
-            draw::draw_rect_fill(x, self.ground_y() as i32 + 10, 8, 2, Color::Inactive);
+            draw::draw_rect_fill(x, self.ground_y() as i32 + 10, 8, 2, sol::BASE1);
             x += GROUND_TILE as i32;
         }
         // Dino body + animated foot.
@@ -222,8 +222,8 @@ impl Model {
             self.dino.w() as i32,
             self.dino.height() as i32,
             match self.dino.jumping {
-                true => Color::Blue,
-                false => Color::Green,
+                true => sol::BLUE,
+                false => sol::GREEN,
             },
         );
         if !self.dino.jumping {
@@ -237,7 +237,7 @@ impl Model {
                 (self.dino.y + self.dino.height() - foot_h) as i32,
                 foot_w as i32,
                 foot_h as i32,
-                Color::Blue,
+                sol::ORANGE,
             );
         }
         // Obstacles.
@@ -249,8 +249,8 @@ impl Model {
                 w as i32,
                 h as i32,
                 match obstacle.kind {
-                    ObstacleKind::Cactus(..) => Color::Selection,
-                    ObstacleKind::Pterodactyl(..) => Color::Magenta,
+                    ObstacleKind::Cactus(..) => sol::GREEN,
+                    ObstacleKind::Pterodactyl(..) => sol::MAGENTA,
                 },
             );
             // Wing hint for flying obstacles so they read differently at speed.
@@ -260,7 +260,7 @@ impl Model {
                     (y - 6.0) as i32,
                     (w / 2.0) as i32,
                     6,
-                    Color::Magenta,
+                    sol::BASE02,
                 );
             }
         }

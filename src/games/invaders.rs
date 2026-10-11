@@ -255,8 +255,9 @@ impl Console for Model {
                         }
                         let (x, y, w, h) = self.rect(col, row);
                         let color = match row {
-                            0 | 3 => Color::Magenta,
-                            _ => Color::Cyan,
+                            0 => sol::RED,
+                            1 | 2 => sol::MAGENTA,
+                            _ => sol::VIOLET,
                         };
                         draw::set_draw_color(color);
                         if self.beat {
@@ -270,25 +271,25 @@ impl Console for Model {
                 }
                 // Ship: a solid block with a turret notch.
                 let (x, y, w, h) = self.rect(self.ship.col, self.ship_row());
-                draw::draw_rect_fill(x, y, w, h, Color::Foreground);
-                draw::draw_rect_fill(x + w / 3, y - h / 3, w / 3, h / 3, Color::Foreground);
+                draw::draw_rect_fill(x, y, w, h, sol::BASE02);
+                draw::draw_rect_fill(x + w / 3, y - h / 3, w / 3, h / 3, sol::BASE02);
                 // Projectiles.
                 for &p in self.shots.bullets() {
                     let (cx, cy) = (
                         p.0 * cell(self.field).0,
                         FIELD_TOP as f32 + p.1 * cell(self.field).1,
                     );
-                    draw::draw_rect_fill(cx as i32, cy as i32, 4, 12, Color::Inactive);
+                    draw::draw_rect_fill(cx as i32, cy as i32, 4, 12, sol::BLUE);
                 }
                 for &p in self.shots.bombs() {
                     let (cx, cy) = (
                         p.0 * cell(self.field).0,
                         FIELD_TOP as f32 + p.1 * cell(self.field).1,
                     );
-                    draw::draw_rect_fill(cx as i32, cy as i32, 6, 6, Color::Red);
+                    draw::draw_rect_fill(cx as i32, cy as i32, 6, 6, sol::ORANGE);
                 }
                 if self.scene == Scene::Paused {
-                    window.draw_overlay("PAUSED", "PRESS ENTER to resume", Color::Background2);
+                    window.draw_overlay("PAUSED", "PRESS ENTER to resume", sol::VIOLET);
                 }
             }
             Scene::GameOver => {
