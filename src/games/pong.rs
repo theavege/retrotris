@@ -50,8 +50,8 @@ impl Model {
         let (ball_x, ball_y, size) = self.ball.draw();
         let center = size as f32 / 2.0;
         // Simulate the ball forward until it reaches the CPU's column.
-        let mut px = ball_x;
-        let mut py = ball_y + center;
+        let mut px = ball_x as f32;
+        let mut py = ball_y as f32 + center;
         let mut vy = self.ball.vy();
         if self.ball.moving_right() {
             let limit = field_h as f32 - size as f32;
@@ -128,7 +128,7 @@ impl Console for Model {
                         State::Playing | State::Serving => self.state = State::Paused,
                         State::Paused => self.state = State::Playing,
                         State::GameOver => self.state = State::Menu,
-                        State::Menu => crate::Game::to_menu(window),
+                        State::Menu => crate::to_menu(window),
                     },
                     Key::Enter => match self.state {
                         State::Menu | State::GameOver => self.restart(),

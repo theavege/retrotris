@@ -93,7 +93,7 @@ impl Console for Model {
                         State::Playing | State::Serving => self.state = State::Paused,
                         State::Paused => self.state = State::Playing,
                         State::GameOver => self.state = State::Menu,
-                        State::Menu => crate::Game::to_menu(window),
+                        State::Menu => crate::to_menu(window),
                     },
                     Key::Enter | SPACE => match self.state {
                         State::Menu | State::GameOver => self.restart(),

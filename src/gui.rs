@@ -88,7 +88,10 @@ where
         );
         let state = std::rc::Rc::new(std::cell::RefCell::new(Self::default()));
         // Remember the live state so the app can save it when leaving the game.
-        crate::CURRENT.set(Some(state.clone()));
+        crate::CURRENT.set(Some(Box::new({
+            let state = state.clone();
+            move |path: &str| state.borrow().exit(path)
+        })));
         state.borrow_mut().load(&path);
         let mut time = Instant::now();
         window.draw({

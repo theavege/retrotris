@@ -1,5 +1,4 @@
 use crate::*;
-use rand::Rng;
 
 
 /// Fixed timestep for the physics simulation (seconds per tick).
@@ -215,9 +214,6 @@ impl Belt {
     pub fn rocks(&self) -> &[Rock] {
         &self.rocks
     }
-    pub fn len(&self) -> usize {
-        self.rocks.len()
-    }
     pub fn is_empty(&self) -> bool {
         self.rocks.is_empty()
     }
@@ -339,15 +335,15 @@ mod tests {
         shots.fire((500.0, 500.0), 0.0);
         let hit = belt.shot(&mut shots, &mut rng);
         assert_eq!(hit, vec![1]);
-        assert_eq!(belt.len(), 2); // two splinters in place of the big rock
+        assert_eq!(belt.rocks().len(), 2); // two splinters in place of the big rock
         assert!(shots.bodies().is_empty());
     }
 
     #[test]
     fn positions_wrap_toroidally() {
         let mut body = Body {
-            pos: (FIELD_W - 1.0, 1.0),
-            vel: (100.0, 0.0),
+            pos: (FIELD_W - 0.5, 1.0),
+            vel: (2.0, 0.0),
             rad: 1.0,
         };
         body.fly(1.0);

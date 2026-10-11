@@ -41,6 +41,10 @@ impl Paddle {
     pub fn center_on(&mut self, y: i32, limit: i32) {
         self.set_y(y - self.size.1 / 2, limit);
     }
+    /// Goal-line column used by the CPU's forward ball simulation.
+    pub fn x(&self) -> i32 {
+        self.x
+    }
     pub fn draw(&self) -> (i32, i32, i32, i32) {
         (self.x, self.y, self.size.0, self.size.1)
     }
