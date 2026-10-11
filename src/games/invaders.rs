@@ -184,10 +184,10 @@ impl Console for Model {
             self.fire_timer += dt;
             if self.fire_timer >= 1.0 / self.score.alien_rate() {
                 self.fire_timer = 0.0;
-                if let Some(col) = self.horde.shooter(&mut rand::rng()) {
-                    if let Some(row) = self.horde.deepest_in(col) {
-                        self.shots.drop_bomb(col as f32 + 0.5, row as f32 + 1.0);
-                    }
+                if let Some(col) = self.horde.shooter(&mut rand::rng())
+                    && let Some(row) = self.horde.deepest_in(col)
+                {
+                    self.shots.drop_bomb(col as f32 + 0.5, row as f32 + 1.0);
                 }
             }
             self.shots.fly(dt, self.score.level(), self.ship_row());

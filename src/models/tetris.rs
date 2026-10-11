@@ -399,7 +399,7 @@ impl Tetris {
             return;
         }
         self.hold_used = true;
-        let taken = std::mem::replace(&mut self.hold_kind, Some(self.curr.kind));
+        let taken = self.hold_kind.replace(self.curr.kind);
         match taken {
             Some(kind) => self.curr = Piece::new(kind),
             // First hold: stash the active piece and pull the queued one in.
@@ -442,16 +442,15 @@ impl Tetris {
         }
     }
     fn apply_input(&mut self) {
-        if let Some(cw) = self.buffered_rot.take() {
-            if let Some(rotated) = self
+        if let Some(cw) = self.buffered_rot.take()
+            && let Some(rotated) = self
                 .curr
                 .rotations(cw)
                 .into_iter()
                 .find(|p| self.grid.fits(p))
-            {
-                self.curr = rotated;
-                self.lock_timer = 0;
-            }
+        {
+            self.curr = rotated;
+            self.lock_timer = 0;
         }
         for dir in [
             self.buffered_left.then_some(-1),
@@ -501,9 +500,9 @@ mod tests {
 
     #[test]
     fn shapes_have_four_cells_in_bounds() {
-        for kind in 0..PIECE_COUNT {
-            for rot in SHAPES[kind] {
-                for (x, y) in rot {
+        for piece in SHAPES.iter().take(PIECE_COUNT) {
+            for rot in piece {
+                for &(x, y) in rot {
                     assert!((0..4).contains(&x) && (0..4).contains(&y));
                 }
             }
