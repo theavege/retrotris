@@ -87,16 +87,32 @@ where
             window.xclass().unwrap(),
         );
         let state = std::rc::Rc::new(std::cell::RefCell::new(Self::default()));
-        // Remember the live state so the app can save it when leaving the game.
+        // Shared flag: once the app leaves this game (e.g. back to the menu),
+        // all callbacks installed here become stale. Handlers installed by the
+        // previous game would otherwise run during `handle_event(Resize)` below
+        // and keep the RefCell borrowed, causing a "already mutably borrowed"
+        // panic; the draw/timeout callbacks would fight the new model for the
+        // same window. Every callback checks the flag before touching `state`.
+        let alive = std::rc::Rc::new(std::cell::Cell::new(true));
+        // Remember the live state so the app can save it when leaving the game,
+        // and disarm this game's callbacks right away.
         crate::CURRENT.set(Some(Box::new({
             let state = state.clone();
-            move |path: &str| state.borrow().exit(path)
+            let alive = alive.clone();
+            move |path: &str| {
+                alive.set(false);
+                state.borrow().exit(path);
+            }
         })));
         state.borrow_mut().load(&path);
         let mut time = Instant::now();
         window.draw({
             let state = state.clone();
+            let alive = alive.clone();
             move |window| {
+                if !alive.get() {
+                    return;
+                }
                 state.borrow_mut().update(time.elapsed().as_secs_f32());
                 state.borrow().draw(window);
                 time = Instant::now();
@@ -104,13 +120,24 @@ where
         });
         window.handle({
             let state = state.clone();
-            move |window, event| state.borrow_mut().handle(window, event)
+            let alive = alive.clone();
+            move |window, event| {
+                if !alive.get() {
+                    return false;
+                }
+                state.borrow_mut().handle(window, event)
+            }
         });
         window.handle_event(Event::Resize);
-        window.set_callback(move |window| {
-            if app::event() == Event::Close {
-                state.borrow().exit(&path);
-                window.hide();
+        window.set_callback({
+            let path = path.clone();
+            move |window| {
+                if app::event() == Event::Close {
+                    if alive.get() {
+                        state.borrow().exit(&path);
+                    }
+                    window.hide();
+                }
             }
         });
     }
