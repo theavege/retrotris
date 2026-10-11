@@ -67,6 +67,18 @@ impl Settings {
     }
 }
 
+/// RAII guard marking a `Console` state RefCell as currently borrowed by one
+/// of the FLTK callbacks (draw / handle / close). See `Console::connect`:
+/// it prevents re-entrant borrows when a redraw is delivered while another
+/// callback still holds the state.
+struct BorrowGuard(std::rc::Rc<std::cell::Cell<bool>>);
+
+impl Drop for BorrowGuard {
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
+}
+
 pub trait Console
 where
     Self: Default + 'static,
@@ -90,10 +102,18 @@ where
         // Shared flag: once the app leaves this game (e.g. back to the menu),
         // all callbacks installed here become stale. Handlers installed by the
         // previous game would otherwise run during `handle_event(Resize)` below
-        // and keep the RefCell borrowed, causing a "already mutably borrowed"
+        // and re-enter the RefCell, causing an "already mutably borrowed"
         // panic; the draw/timeout callbacks would fight the new model for the
         // same window. Every callback checks the flag before touching `state`.
         let alive = std::rc::Rc::new(std::cell::Cell::new(true));
+        // Re-entrancy guard: FLTK may fire a queued redraw *while* we are
+        // still inside a key/mouse handler (e.g. a game calls `redraw()` and
+        // then `to_menu()` in the same event). Without this guard the draw
+        // closure would try to `borrow_mut()` the state that the handler
+        // closure already borrows mutably -> "RefCell already mutably
+        // borrowed" panic. When busy, we simply skip: the periodic timeout
+        // redraws anyway, so no frame is lost.
+        let busy = std::rc::Rc::new(std::cell::Cell::new(false));
         // Remember the live state so the app can save it when leaving the game,
         // and disarm this game's callbacks right away.
         crate::CURRENT.set(Some(Box::new({
@@ -109,10 +129,12 @@ where
         window.draw({
             let state = state.clone();
             let alive = alive.clone();
+            let busy = busy.clone();
             move |window| {
-                if !alive.get() {
+                if !alive.get() || busy.get() {
                     return;
                 }
+                let _guard = BorrowGuard(busy.clone());
                 state.borrow_mut().update(time.elapsed().as_secs_f32());
                 state.borrow().draw(window);
                 time = Instant::now();
@@ -121,19 +143,25 @@ where
         window.handle({
             let state = state.clone();
             let alive = alive.clone();
+            let busy = busy.clone();
             move |window, event| {
-                if !alive.get() {
+                if !alive.get() || busy.get() {
                     return false;
                 }
+                let _guard = BorrowGuard(busy.clone());
                 state.borrow_mut().handle(window, event)
             }
         });
         window.handle_event(Event::Resize);
         window.set_callback({
             let path = path.clone();
+            let state = state.clone();
+            let alive = alive.clone();
+            let busy = busy.clone();
             move |window| {
                 if app::event() == Event::Close {
-                    if alive.get() {
+                    if alive.get() && !busy.get() {
+                        let _guard = BorrowGuard(busy.clone());
                         state.borrow().exit(&path);
                     }
                     window.hide();

@@ -253,29 +253,44 @@ mod tests {
         if b.won {
             return; // degenerate draw: every cell is already revealed
         }
+        // Flag an actual mine so `remaining` (which counts hidden mines)
+        // really goes down; a flag on a safe cell would not change it.
+        let mine = b
+            .coords()
+            .find(|&(r, c)| b.cell(r, c).mine)
+            .expect("a mine exists");
         let before = b.remaining();
-        assert!(b.toggle_flag(4, 4));
+        assert!(b.toggle_flag(mine.0, mine.1));
         assert_eq!(b.remaining(), before - 1);
-        assert!(b.toggle_flag(4, 4)); // unflag
+        assert!(b.toggle_flag(mine.0, mine.1)); // unflag
         assert_eq!(b.remaining(), before);
         // flagged cells cannot be opened
-        b.toggle_flag(4, 4);
-        assert!(!b.open(4, 4, &mut rng));
+        b.toggle_flag(mine.0, mine.1);
+        assert!(!b.open(mine.0, mine.1, &mut rng));
     }
 
     #[test]
     fn chord_only_fires_when_flags_match_number() {
+        // Deterministic board: one mine at the top-right corner of a 3x9
+        // field, first click at the top-left. The empty region floods open
+        // along the top row; cell (0,7) shows "1" and its only closed
+        // neighbor is the flagged mine — the perfect chord setup.
         let mut rng = rand::rng();
-        // 9x9 with one mine: flood fill opens everything except the mine ring,
-        // which shows numbers after the first click at the opposite corner.
-        let mut b = Board::new(9, 9, 1);
-        b.open(0, 0, &mut rng);
-        let Some(num) = b
-            .coords()
-            .find(|&(r, c)| b.cell(r, c).open && b.cell(r, c).adj > 0)
-        else {
-            return; // mine landed next to the safe zone: board already won
-        };
+        let mut b = Board::new(3, 9, 1);
+        b.cells[8].mine = true;
+        for i in 0..b.cells.len() {
+            let (r, c) = (i / b.cols, i % b.cols);
+            b.cells[i].adj = b
+                .neighbors(r, c)
+                .iter()
+                .filter(|&&(nr, nc)| b.cells[nr * b.cols + nc].mine)
+                .count() as u8;
+        }
+        b.placed = true;
+        assert!(b.open(0, 0, &mut rng));
+        assert!(!b.lost && !b.won);
+        let num = (0, 7);
+        assert!(b.cell(num.0, num.1).open && b.cell(num.0, num.1).adj == 1);
         // without the correct flag, chord does nothing
         assert!(!b.chord(num.0, num.1, &mut rng));
         // flag the single mine neighbor and chord again
